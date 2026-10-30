@@ -138,6 +138,21 @@ function drawRainbow(g, s, colors) {
   g.closePath(); g.fill();
 }
 
+// Предмет для цели drop: вишенка.
+function drawItem(g, s) {
+  g.lineCap = 'round';
+  g.strokeStyle = '#3f8f2a'; g.lineWidth = s * 0.05;
+  g.beginPath(); g.moveTo(s * 0.35, s * 0.62); g.quadraticCurveTo(s * 0.45, s * 0.25, s * 0.62, s * 0.18);
+  g.moveTo(s * 0.65, s * 0.66); g.quadraticCurveTo(s * 0.62, s * 0.3, s * 0.62, s * 0.18); g.stroke();
+  g.fillStyle = '#4fb83a'; g.beginPath(); g.ellipse(s * 0.72, s * 0.2, s * 0.1, s * 0.05, -0.4, 0, Math.PI * 2); g.fill();
+  for (const [x, y] of [[0.33, 0.68], [0.66, 0.72]]) {
+    const gr = g.createRadialGradient(s * (x - 0.05), s * (y - 0.06), s * 0.02, s * x, s * y, s * 0.18);
+    gr.addColorStop(0, '#ff8a8a'); gr.addColorStop(0.5, '#e01b3c'); gr.addColorStop(1, '#8a0f26');
+    g.fillStyle = gr; g.beginPath(); g.arc(s * x, s * y, s * 0.16, 0, Math.PI * 2); g.fill();
+    g.lineWidth = s * 0.02; g.strokeStyle = '#5a0a1a'; g.stroke();
+  }
+}
+
 // --- Препятствия (рисуются на весь размер клетки) ---
 function rr(g, x, y, w, h, r) {
   g.beginPath();
@@ -253,8 +268,9 @@ export function buildAtlas(theme, px) {
     obstacles[kind] = [null];
     for (let hp = 1; hp <= maxHp; hp++) { const c = mk(px); fn(c.getContext('2d'), px, hp); obstacles[kind][hp] = c; }
   }
+  const item = mk(px); drawItem(item.getContext('2d'), px);
   const unknown = mk(px); drawUnknownObstacle(unknown.getContext('2d'), px);
-  return { tiles, obstacles, unknown, px };
+  return { tiles, obstacles, unknown, item, px };
 }
 
 export function obstacleImg(atlas, kind, hp) {

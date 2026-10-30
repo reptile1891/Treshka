@@ -90,13 +90,13 @@ export function init(game) {
   function newSprite() {
     return free.pop() ?? {
       id: 0, type: 0, special: 0, x: 0, y: 0, tx: 0, ty: 0, fx: 0, fy: 0, vy: 0,
-      mode: 0, t: 0, dur: 0.2, pp: false, delay: 0, scale: 1, sq: 0, alpha: 1, rot: 0, dying: 0, dt: 0, pop: 0, mark: false,
+      mode: 0, t: 0, dur: 0.2, pp: false, delay: 0, scale: 1, sq: 0, alpha: 1, rot: 0, dying: 0, dt: 0, pop: 0, mark: false, item: null,
     };
   }
 
   function spawn(tile, r, c, startY, delay) {
     const s = newSprite();
-    s.id = tile.id ?? nextSyn--; s.type = tile.type | 0;
+    s.id = tile.id ?? nextSyn--; s.type = tile.type | 0; s.item = tile.item ?? null;
     s.special = SPECIAL_INDEX[tile.special] ?? 0;
     s.x = s.tx = c; s.y = startY; s.ty = r; s.fx = c; s.fy = startY;
     s.vy = 0; s.mode = startY < r ? 2 : 0; s.t = 0; s.pp = false; s.delay = delay;
@@ -141,7 +141,7 @@ export function init(game) {
         if (e) { byId.delete(e.id); e.id = t.id; byId.set(e.id, e); s = e; }
       }
       if (!s) s = spawn(t, r, c, r - 1, 0), s.alpha = 0, s.pop = 1;
-      s.mark = true; s.type = t.type; s.special = SPECIAL_INDEX[t.special] ?? 0;
+      s.mark = true; s.type = t.type; s.item = t.item ?? null; s.special = SPECIAL_INDEX[t.special] ?? 0;
       grid[r][c] = s;
       if (s.mode === 0 && (Math.abs(s.x - c) > 0.01 || Math.abs(s.y - r) > 0.01)) tweenTo(s, r, c, dur);
       else { s.tx = c; s.ty = r; }
@@ -149,13 +149,182 @@ export function init(game) {
     for (const s of sprites) if (!s.mark && !s.dying) kill(s, 2);
   }
 
+  // ---------- Очередь анимаций ----------
+  // Движок синхронный и шлёт события вперемешку (special:created/fired и obstacle:damaged — до tiles:cleared,
+  // комбо special:fired — до swap:done). Поэтому события копятся и проигрываются по шагам; логическая сетка
+  // спрайтов меняется только в момент проигрывания. Шаг = [эффекты спецфишек] -> очистка -> превращение.
+  const queue = [];
+  let cur = null, lastStep = null;
+  const newPend = () => ({ created: [], fired: [], damaged: [], spawned: [], dropped: [] });
+  let pend = newPend();
+  const hasPend = () => pend.created.length + pend.fired.length + pend.damaged.length + pend.spawned.length + pend.dropped.length > 0;
+
+  function pushStep(cleared, chain) {
+    lastStep = { k: 'step', ...pend, cleared, chain, score: 0, started: false, t: 0, dur: 0, tl: [] };
+    pend = newPend();
+    queue.push(lastStep);
+  }
+  const flush = () => { if (hasPend()) pushStep(null, 0); };
+  const push = (op) => { op.t = 0; op.dur = 0; op.tl = []; queue.push(op); };
+
+  const SPECIAL_PART = { line_h: 1, line_v: 1, bomb: 1, rainbow: 1, plane: 1 };
+  function fireFx({ at, special, affected }) {
+    const x = px(at.c), y = py(at.r), n = affected?.length ?? 0, w = cell * 0.35;
+    const parts = String(special).split('+').filter((p) => SPECIAL_PART[p]);
+    let big = false, beams = 0;
+    for (const p of parts) {
+      if (p === 'line_h') beam(bx, y, bx + cols * cell, y, w, 7);
+      else if (p === 'line_v') beam(x, by, x, by + rows * cell, w, 7);
+      else if (p === 'rainbow' || p === 'plane') {
+        for (let i = 0; i < n && beams < 20; i++, beams++) beam(x, y, px(affected[i].c), py(affected[i].r), w * 0.6, p === 'plane' ? 6 : i % 6, 0.45);
+      } else big = true;
+    }
+    ring(x, y, cell * (big ? 2.2 : 1.4), 7, 0.5);
+    burst(x, y, 7, 18, cell * 8, cell * 0.09);
+    addShake(Math.min(5 + n * 0.5, 14));
+    floatText(parts.length > 1 ? 'Комбо!' : SPECIAL_TEXT[parts[0]] ?? 'Бум!', x, y - cell * 0.6, '#fff', cell / 50, 0.9, true);
+  }
+
+  function applyDamage({ at, kind, hp }) {
+    const o = obst[at.r]?.[at.c];
+    if (!o) return;
+    o.hp = hp; o.flash = 1;
+    const x = px(at.c), y = py(at.r), ci = OBS_COLOR[kind] ?? 6;
+    if (hp <= 0) { o.dying = 1; o.t = 0; burst(x, y, ci, 16, cell * 6, cell * 0.1); addShake(2.5); }
+    else burst(x, y, ci, 7, cell * 4, cell * 0.07);
+  }
+
+  function applySpawned({ at, kind, hp }) { // слизь расползлась: фишку в клетке убираем, препятствие вырастает
+    const s = grid[at.r]?.[at.c];
+    if (s) { kill(s, 2); grid[at.r][at.c] = null; }
+    obst[at.r][at.c] = { kind, hp, flash: 1, dying: 0, t: 0 };
+    burst(px(at.c), py(at.r), OBS_COLOR[kind] ?? 9, 8, cell * 4, cell * 0.07);
+  }
+
+  function doClear(op) {
+    let sx = 0, sy = 0, n = 0;
+    for (const { r, c, type } of op.cleared ?? []) {
+      const s = grid[r]?.[c];
+      lastType.set(r * 64 + c, type);
+      if (s) {
+        kill(s, 1); grid[r][c] = null;
+        // фишки группы «втягиваются» в клетку, где рождается спецфишка
+        let best = null, bd = 99;
+        for (const a of op.created) { const d = Math.abs(a.at.r - r) + Math.abs(a.at.c - c); if (d < bd && d <= 4) { bd = d; best = a.at; } }
+        if (best) tweenTo(s, best.r, best.c, 0.18);
+      }
+      burst(px(c), py(r), type < 0 ? 7 : type, 9, cell * 5, cell * 0.08);
+      sx += px(c); sy += py(r); n++;
+    }
+    for (const d of op.damaged) applyDamage(d);
+    for (const d of op.spawned) applySpawned(d);
+    if (!n) return;
+    lastCx = sx / n; lastCy = sy / n;
+    if (op.score > 0) floatText('+' + op.score, lastCx, lastCy, '#fff', cell / 70, 0.9);
+    const chain = op.chain, k = cell / 48;
+    if (chain >= 2) {
+      floatText(COMBO[Math.min(chain, COMBO.length - 1)], bx + cell * cols / 2, by + cell * rows * 0.4, theme.accent, k * (1 + Math.min(chain, 6) * 0.08), 1.3, true);
+      addShake(Math.min(2 + chain * 1.5, 10));
+    } else if (n >= 5) addShake(2);
+  }
+
+  function doCreate({ at, special }) { // превращение уцелевшей фишки в спецфишку
+    let s = grid[at.r]?.[at.c];
+    if (!s || s.dying) {
+      s = spawn({ type: lastType.get(at.r * 64 + at.c) ?? 0, special }, at.r, at.c, at.r, 0);
+      grid[at.r][at.c] = s;
+    }
+    s.special = SPECIAL_INDEX[special] ?? 0; s.pop = 1; s.sq = -0.3;
+    ring(px(at.c), py(at.r), cell * 0.9, 7, 0.45);
+    burst(px(at.c), py(at.r), 6, 14, cell * 6, cell * 0.07);
+  }
+
+  function begin(op) {
+    op.started = true;
+    switch (op.k) {
+      case 'swap': {
+        const { from, to, valid } = op;
+        const a = grid[from.r]?.[from.c], b = grid[to.r]?.[to.c];
+        op.dur = valid ? TIMINGS.swap : TIMINGS.swap * 1.6;
+        if (!a || !b) return;
+        if (valid) {
+          grid[from.r][from.c] = b; grid[to.r][to.c] = a;
+          tweenTo(a, to.r, to.c, TIMINGS.swap); tweenTo(b, from.r, from.c, TIMINGS.swap);
+        } else {
+          tweenTo(a, to.r, to.c, op.dur, true); tweenTo(b, from.r, from.c, op.dur, true);
+          addShake(3);
+        }
+        sel.on = false;
+        return;
+      }
+      case 'step': {
+        for (const f of op.fired) fireFx(f);
+        const t1 = op.fired.length ? 0.3 : 0;                 // эффект спецфишки играет до исчезновения фишек
+        const t2 = t1 + (op.created.length && op.cleared ? 0.18 : 0);
+        op.tl.push({ t: t1, fn: () => doClear(op) });
+        if (op.created.length) op.tl.push({ t: t2, fn: () => { for (const c of op.created) doCreate(c); } });
+        for (const d of op.dropped) op.tl.push({ t: t1, fn: () => floatText('Предмет!', px(d.at.c), py(d.at.r), theme.accent, cell / 60, 0.9) });
+        op.tl.sort((a, b) => a.t - b.t);
+        op.dur = t2 + (op.cleared ? 0.24 : 0.3);
+        return;
+      }
+      case 'fall': {
+        let maxT = 0;
+        const tmp = [];
+        for (const m of op.moves) {
+          const s = byId.get(m.tile?.id) ?? grid[m.from.r]?.[m.from.c];
+          if (!s) continue;
+          if (grid[m.from.r][m.from.c] === s) grid[m.from.r][m.from.c] = null;
+          tmp.push(s, m.to);
+        }
+        for (let i = 0; i < tmp.length; i += 2) {
+          const s = tmp[i], to = tmp[i + 1];
+          grid[to.r][to.c] = s; s.tx = to.c; s.ty = to.r;
+          if (s.y < to.r - 0.001) { s.mode = 2; s.delay = 0; maxT = Math.max(maxT, Math.sqrt(2 * (to.r - s.y) / GRAVITY)); }
+          else if (s.mode !== 2) tweenTo(s, to.r, to.c, 0.15);
+        }
+        colCount.fill(0);
+        for (const sp of op.spawned) colCount[sp.to.c]++;
+        for (const sp of op.spawned) {
+          const from = sp.to.r - colCount[sp.to.c] - 0.2;
+          const s = spawn(sp.tile, sp.to.r, sp.to.c, from, 0);
+          grid[sp.to.r][sp.to.c] = s;
+          maxT = Math.max(maxT, Math.sqrt(2 * (sp.to.r - from) / GRAVITY));
+        }
+        op.dur = maxT + 0.08;
+        return;
+      }
+      case 'settle': reconcile(op.board, 0.2); op.dur = 0.1; return;
+      case 'shuffle':
+        reconcile(op.board, TIMINGS.shuffle);
+        for (const s of sprites) if (!s.dying) s.pop = 1;
+        floatText('Перемешивание!', bx + cell * cols / 2, by + cell * rows / 2, '#fff', cell / 50, 1.2, true);
+        op.dur = TIMINGS.shuffle + 0.1;
+        return;
+      case 'confetti':
+        for (let i = 0; i < 28; i++) burst(bx + Math.random() * cols * cell, by + cell, i % 8, 5, cell * 8, cell * 0.12);
+        op.dur = 0.1;
+    }
+  }
+
+  function pump(dt) {
+    if (!cur) {
+      if (!queue.length) return;
+      cur = queue.shift(); begin(cur);
+    }
+    cur.t += dt;
+    while (cur.tl.length && cur.tl[0].t <= cur.t) cur.tl.shift().fn();
+    if (cur.t >= cur.dur) { if (cur === lastStep) lastStep = null; cur = null; }
+  }
+
   // ---------- События ----------
   bus.on('level:start', ({ board }) => {
     cols = board.cols; rows = board.rows;
+    queue.length = 0; cur = null; lastStep = null; pend = newPend();
     clearAll(); lastType.clear();
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
       const cl = board.cells[r][c];
-      holes[r][c] = !cl.tile && !cl.obstacle;
+      holes[r][c] = cl.hole ?? (!cl.tile && !cl.obstacle);
     }
     layout();
     reconcileInitial(board);
@@ -170,112 +339,24 @@ export function init(game) {
     }
   }
 
-  bus.on('swap:done', ({ from, to, valid }) => {
-    const a = grid[from.r]?.[from.c], b = grid[to.r]?.[to.c];
-    if (!a || !b) return;
-    if (valid) {
-      grid[from.r][from.c] = b; grid[to.r][to.c] = a;
-      tweenTo(a, to.r, to.c, TIMINGS.swap); tweenTo(b, from.r, from.c, TIMINGS.swap);
-      a.scale = b.scale = 1;
-    } else {
-      tweenTo(a, to.r, to.c, TIMINGS.swap * 1.6, true); tweenTo(b, from.r, from.c, TIMINGS.swap * 1.6, true);
-      addShake(3);
-    }
-    sel.on = false;
-  });
-
-  bus.on('tiles:cleared', ({ cells, chain }) => {
-    let sx = 0, sy = 0, n = 0;
-    for (const { r, c, type } of cells) {
-      const s = grid[r]?.[c];
-      lastType.set(r * 64 + c, type);
-      if (s) { kill(s, 1); grid[r][c] = null; }
-      burst(px(c), py(r), type, 9, cell * 5, cell * 0.08);
-      sx += px(c); sy += py(r); n++;
-    }
-    if (!n) return;
-    lastCx = sx / n; lastCy = sy / n;
-    const k = cell / 48;
-    if (chain >= 2) {
-      floatText(COMBO[Math.min(chain, COMBO.length - 1)], bx + cell * cols / 2, by + cell * rows * 0.4, theme.accent, k * (1 + Math.min(chain, 6) * 0.08), 1.3, true);
-      addShake(Math.min(2 + chain * 1.5, 10));
-    } else if (n >= 5) addShake(2);
-  });
-
-  bus.on('score:changed', ({ delta }) => {
-    if (delta > 0 && lastCx) floatText('+' + delta, lastCx, lastCy, '#fff', cell / 70, 0.9);
-  });
-
-  bus.on('special:created', ({ at, special }) => {
-    let s = grid[at.r]?.[at.c];
-    const idx = SPECIAL_INDEX[special] ?? 0;
-    if (!s || s.dying) {
-      s = spawn({ type: lastType.get(at.r * 64 + at.c) ?? 0, special }, at.r, at.c, at.r, 0);
-      grid[at.r][at.c] = s;
-    }
-    s.special = idx; s.pop = 1; s.sq = -0.3;
-    ring(px(at.c), py(at.r), cell * 0.9, 7, 0.45);
-    burst(px(at.c), py(at.r), 6, 14, cell * 6, cell * 0.07);
-  });
-
-  bus.on('special:fired', ({ at, special, affected }) => {
-    const x = px(at.c), y = py(at.r), n = affected?.length ?? 0, w = cell * 0.35;
-    if (special === 'line_h') beam(bx, y, bx + cols * cell, y, w, 7);
-    else if (special === 'line_v') beam(x, by, x, by + rows * cell, w, 7);
-    else if (special === 'rainbow' || special === 'plane') {
-      for (let i = 0; i < n && i < 20; i++) beam(x, y, px(affected[i].c), py(affected[i].r), w * 0.6, special === 'plane' ? 6 : i % 6, 0.45);
-    }
-    ring(x, y, cell * (special === 'bomb' ? 2.2 : 1.4), 7, 0.5);
-    burst(x, y, 7, 18, cell * 8, cell * 0.09);
-    addShake(Math.min(5 + n * 0.5, 14));
-    floatText(SPECIAL_TEXT[special] ?? 'Бум!', x, y - cell * 0.6, '#fff', cell / 50, 0.9, true);
-  });
-
-  bus.on('obstacle:damaged', ({ at, kind, hp }) => {
-    const o = obst[at.r]?.[at.c];
-    if (!o) return;
-    o.hp = hp; o.flash = 1;
-    const x = px(at.c), y = py(at.r), ci = OBS_COLOR[kind] ?? 6;
-    if (hp <= 0) { o.dying = 1; o.t = 0; burst(x, y, ci, 16, cell * 6, cell * 0.1); addShake(2.5); }
-    else burst(x, y, ci, 7, cell * 4, cell * 0.07);
-  });
-
-  bus.on('tiles:fell', ({ moves, spawned }) => {
-    const tmp = [];
-    for (const m of moves) {
-      const s = byId.get(m.tile?.id) ?? grid[m.from.r]?.[m.from.c];
-      if (!s) continue;
-      if (grid[m.from.r][m.from.c] === s) grid[m.from.r][m.from.c] = null;
-      tmp.push(s, m.to);
-    }
-    for (let i = 0; i < tmp.length; i += 2) {
-      const s = tmp[i], to = tmp[i + 1];
-      grid[to.r][to.c] = s; s.tx = to.c; s.ty = to.r;
-      if (s.y < to.r - 0.001) { s.mode = 2; s.delay = 0; } else if (s.mode !== 2) tweenTo(s, to.r, to.c, 0.15);
-    }
-    colCount.fill(0);
-    for (const sp of spawned) colCount[sp.to.c]++;
-    for (const sp of spawned) {
-      const s = spawn(sp.tile, sp.to.r, sp.to.c, sp.to.r - colCount[sp.to.c] - 0.2, 0);
-      grid[sp.to.r][sp.to.c] = s;
-    }
-  });
-
-  bus.on('board:settled', ({ board }) => { if (board) reconcile(board, 0.2); });
-  bus.on('board:shuffled', ({ board }) => {
-    reconcile(board, TIMINGS.shuffle);
-    for (const s of sprites) if (!s.dying) s.pop = 1;
-    floatText('Перемешивание!', bx + cell * cols / 2, by + cell * rows / 2, '#fff', cell / 50, 1.2, true);
-  });
+  bus.on('swap:done', ({ from, to, valid }) => push({ k: 'swap', from, to, valid })); // pend не трогаем: комбо-эффект идёт следом
+  bus.on('special:created', (p) => pend.created.push(p));
+  bus.on('special:fired', (p) => pend.fired.push(p));
+  bus.on('obstacle:damaged', (p) => pend.damaged.push(p));
+  bus.on('obstacle:spawned', (p) => pend.spawned.push(p));
+  bus.on('item:dropped', (p) => pend.dropped.push(p));
+  bus.on('tiles:cleared', ({ cells, chain }) => pushStep(cells, chain));
+  bus.on('score:changed', ({ delta }) => { if (delta > 0 && lastStep && !lastStep.started) lastStep.score += delta; });
+  bus.on('tiles:fell', ({ moves, spawned }) => { flush(); push({ k: 'fall', moves, spawned }); });
+  bus.on('turn:end', () => flush());
+  bus.on('board:settled', ({ board }) => { flush(); if (board) push({ k: 'settle', board }); });
+  bus.on('board:shuffled', ({ board }) => { flush(); push({ k: 'shuffle', board }); });
   bus.on('hint:show', ({ cells }) => {
     if (!cells?.length) return;
     hint.r1 = cells[0].r; hint.c1 = cells[0].c;
     hint.r2 = cells[1]?.r ?? -1; hint.c2 = cells[1]?.c ?? -1; hint.t = 1.8;
   });
-  bus.on('level:won', () => {
-    finished = true;
-    for (let i = 0; i < 28; i++) burst(bx + Math.random() * cols * cell, by + cell, i % 8, 5, cell * 8, cell * 0.12);
-  });
+  bus.on('level:won', () => { finished = true; flush(); push({ k: 'confetti' }); });
   bus.on('level:failed', () => { finished = true; });
   bus.on('booster:armed', ({ kind }) => { armed = kind; });
   bus.on('ui:screen', ({ name }) => {
@@ -301,10 +382,17 @@ export function init(game) {
   const back = (t) => { const c = 1.9, u = t - 1; return 1 + (c + 1) * u * u * u + c * u * u; }; // easeOutBack
 
   function update(dt) {
+    pump(dt);
     for (let i = sprites.length - 1; i >= 0; i--) {
       const s = sprites[i];
       if (s.dying) {
         s.dt += dt;
+        if (s.mode === 1) { // втягивание в новую спецфишку
+          s.t += dt / s.dur;
+          const k = s.t >= 1 ? 1 : s.t, e = 1 - (1 - k) * (1 - k);
+          s.x = s.fx + (s.tx - s.fx) * e; s.y = s.fy + (s.ty - s.fy) * e;
+          if (k >= 1) s.mode = 0;
+        }
         const lim = s.dying === 1 ? TIMINGS.clear : 0.25;
         if (s.dt >= lim) { sprites[i] = sprites[sprites.length - 1]; sprites.pop(); free.push(s); }
         continue;
@@ -372,7 +460,7 @@ export function init(game) {
       }
       if (sel.on && !s.dying && Math.round(s.ty) === sel.r && Math.round(s.tx) === sel.c) sc *= 1.1 + 0.04 * Math.sin(time * 9);
       const rot = s.special === 5 ? time * 1.4 : sel.on && Math.round(s.ty) === sel.r && Math.round(s.tx) === sel.c ? Math.sin(time * 10) * 0.06 : 0;
-      put(atlas.tiles[s.special][s.special === 5 ? 0 : s.type], px(s.x) + ox, py(s.y) + oy, sc * (1 + s.sq), sc * (1 - s.sq), rot, a);
+      put(s.item ? atlas.item : atlas.tiles[s.special][s.special === 5 ? 0 : s.type], px(s.x) + ox, py(s.y) + oy, sc * (1 + s.sq), sc * (1 - s.sq), rot, a);
     }
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
       const o = obst[r][c]; if (!o) continue;
@@ -418,6 +506,6 @@ export function init(game) {
     icon: (kind, key, hp = 1) => makeIcon(theme, kind, key, hp),
     timings: TIMINGS,
     // true, пока что-то движется или исчезает — ядро может подождать перед следующим шагом.
-    isBusy: () => sprites.some((s) => s.dying || s.mode !== 0 || s.delay > 0),
+    isBusy: () => !!cur || queue.length > 0 || hasPend() || sprites.some((s) => s.dying || s.mode !== 0 || s.delay > 0),
   };
 }

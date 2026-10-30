@@ -9,7 +9,8 @@ const LAYERS = {
   menu: ['menu'], map: ['map'], game: ['game'],
   pause: ['game', 'pause'], win: ['game', 'win'], lose: ['game', 'lose'],
 };
-const RESULT_DELAY = 900; // мс: дать доиграть анимациям последнего хода
+const RESULT_DELAY = 500; // мс после того, как render закончил анимации последнего хода
+const RESULT_MAX_WAIT = 8000;
 
 export function init(game) {
   const { bus } = game;
@@ -53,14 +54,18 @@ export function init(game) {
 
   bus.on('level:load', () => ui.showScreen('game'));
   bus.on('level:start', () => { if (ui.current !== 'game') ui.showScreen('game'); });
-  bus.on('level:won', (p) => {
-    screens.showWin(p);
-    resultTimer = setTimeout(() => ui.showScreen('win'), RESULT_DELAY);
-  });
-  bus.on('level:failed', (p) => {
-    screens.showLose(p);
-    resultTimer = setTimeout(() => ui.showScreen('lose'), RESULT_DELAY);
-  });
+  // Итоговый экран показываем, когда очередь анимаций render опустела.
+  const afterAnimations = (name) => {
+    const t0 = performance.now();
+    const tick = () => {
+      const busy = game.modules.render?.isBusy?.() && performance.now() - t0 < RESULT_MAX_WAIT;
+      resultTimer = setTimeout(busy ? tick : () => ui.showScreen(name), busy ? 100 : RESULT_DELAY);
+    };
+    clearTimeout(resultTimer);
+    resultTimer = setTimeout(tick, 100);
+  };
+  bus.on('level:won', (p) => { screens.showWin(p); afterAnimations('win'); });
+  bus.on('level:failed', (p) => { screens.showLose(p); afterAnimations('lose'); });
 
   window.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
