@@ -15,7 +15,7 @@ Tile   = { id, type: 0..5, special: null|'line_h'|'line_v'|'bomb'|'rainbow'|'pla
          // предмет (для цели drop): type = -1, item = 'cherry'|...; не матчится, не бьётся спецфишками
 Obstacle = { kind: 'ice'|'chain'|'crate'|'slime'|'stone'|..., hp }   // hp в событиях: 0 = разрушено
 Goal   = { kind: 'collect'|'clear_obstacle'|'score'|'drop', target, amount }
-LevelDef = { id, board: {cols, rows, layout, specials?}, moves, goals: Goal[], stars: [s1,s2,s3], tileTypes, seed? }
+LevelDef = { id, board: {cols, rows, layout, specials?, items?}, moves, goals: Goal[], stars: [s1,s2,s3], tileTypes, seed? }
 // tileTypes: число типов или массив id; seed — для детерминированного ГСЧ (по умолчанию 1)
 // layout: массив строк по rows, символ на клетку: '.' пусто, '#' дыра, 'i' лёд, 'c' цепь, 'x' ящик, 's' слизь.
 //   Дыры и ящики (hp>0) неподвижны: фишки не падают через них; цепь не даёт двигать фишку.
@@ -25,11 +25,14 @@ LevelDef = { id, board: {cols, rows, layout, specials?}, moves, goals: Goal[], s
 - `board.layout` — массив `rows` строк по `cols` символов, `layout[r][c]`, r=0 сверху:
   `.` обычная клетка, `#` дыра (hole), `i`/`I` лёд hp 1/2, `c`/`C` цепь hp 1/2, `x`/`X` ящик hp 1/2, `s` слизь hp 1.
 - `board.specials` (необязательно) — заранее выставленные спецфишки `[{r,c,special,type?}]`, на клетках без дыры.
+- `board.items` (для цели `drop`) — предметы на старте `[{r,c,item}]`: `item` — имя (`cherry`…), клетка пустая или со льдом,
+  не в нижнем ряду, под ней в колонке нет дыр и ящиков. **Core ставит их на доску после заполнения цветами**
+  (`tile = {type:-1, special:null, item}`): `buildBoard` возвращает поле без фишек, предметы туда не попадают.
 - `tileTypes` — id используемых цветов (подмножество `0..5`), 3–6 штук. `moves` — число ходов.
 - `stars` — пороги счёта для 1/2/3 звёзд, строго по возрастанию. Победа определяется целями, звёзды — счётом.
 - Цели: `collect` — `target`=id цвета; `clear_obstacle` — `target`=kind, `amount`=сколько снять суммарно
   (для слизи, которая растёт, может быть больше стартового числа клеток); `score` — без `target`;
-  `drop` — `target`='item', зарезервировано (в уровнях пока не используется).
+  `drop` — `target`=имя предмета (без `target` — любые), `amount` ≤ числа таких предметов в `board.items` (валидатор проверяет).
 - Загрузчик отдаёт `LevelDef` как есть; готовое поле без фишек строит `levels.buildBoard(levelDef)`.
 
 ## События (payload)
