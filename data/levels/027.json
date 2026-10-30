@@ -1,0 +1,25 @@
+{
+  "id": 27,
+  "board": {
+    "cols": 8,
+    "rows": 8,
+    "layout": [
+      "IIIIIIII",
+      "........",
+      "........",
+      "...sx...",
+      "...xs...",
+      "........",
+      "........",
+      "IIIIIIII"
+    ]
+  },
+  "moves": 32,
+  "goals": [
+    { "kind": "clear_obstacle", "target": "ice", "amount": 16 },
+    { "kind": "clear_obstacle", "target": "slime", "amount": 12 },
+    { "kind": "clear_obstacle", "target": "crate", "amount": 2 }
+  ],
+  "stars": [5400, 8600, 12400],
+  "tileTypes": [0, 1, 2, 3, 4, 5]
+}

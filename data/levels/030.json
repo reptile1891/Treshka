@@ -1,0 +1,31 @@
+{
+  "id": 30,
+  "board": {
+    "cols": 8,
+    "rows": 8,
+    "layout": [
+      "s......s",
+      "........",
+      ".X....X.",
+      "..CCCC..",
+      "........",
+      ".X....X.",
+      "IIIIIIII",
+      "#IIIIII#"
+    ],
+    "specials": [
+      { "r": 4, "c": 3, "special": "bomb" },
+      { "r": 4, "c": 4, "special": "plane" }
+    ]
+  },
+  "moves": 35,
+  "goals": [
+    { "kind": "clear_obstacle", "target": "ice", "amount": 14 },
+    { "kind": "clear_obstacle", "target": "crate", "amount": 4 },
+    { "kind": "clear_obstacle", "target": "chain", "amount": 4 },
+    { "kind": "clear_obstacle", "target": "slime", "amount": 12 },
+    { "kind": "score", "amount": 6000 }
+  ],
+  "stars": [6200, 9900, 14300],
+  "tileTypes": [0, 1, 2, 3, 4, 5]
+}

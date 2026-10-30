@@ -1,0 +1,28 @@
+{
+  "id": 18,
+  "board": {
+    "cols": 8,
+    "rows": 8,
+    "layout": [
+      "........",
+      "........",
+      "iiiiiiii",
+      "iiiiiiii",
+      "........",
+      "........",
+      "........",
+      "........"
+    ],
+    "specials": [
+      { "r": 2, "c": 1, "special": "line_h" },
+      { "r": 3, "c": 6, "special": "line_h" },
+      { "r": 6, "c": 3, "special": "line_v" }
+    ]
+  },
+  "moves": 20,
+  "goals": [
+    { "kind": "clear_obstacle", "target": "ice", "amount": 16 }
+  ],
+  "stars": [2900, 4600, 6700],
+  "tileTypes": [0, 1, 2, 3, 4]
+}

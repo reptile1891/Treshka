@@ -1,0 +1,22 @@
+{
+  "id": 12,
+  "board": {
+    "cols": 7,
+    "rows": 7,
+    "layout": [
+      ".xxxxx.",
+      ".......",
+      ".......",
+      ".......",
+      ".......",
+      ".......",
+      "..xx..."
+    ]
+  },
+  "moves": 22,
+  "goals": [
+    { "kind": "clear_obstacle", "target": "crate", "amount": 7 }
+  ],
+  "stars": [3000, 4800, 6900],
+  "tileTypes": [0, 1, 2, 3]
+}
