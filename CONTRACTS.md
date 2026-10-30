@@ -41,7 +41,7 @@ LevelDef = { id, board: {cols, rows, layout, specials?}, moves, goals: Goal[], s
 | `input:swap` | ui/render | `{ from:{r,c}, to:{r,c} }` |
 | `input:booster` | ui | `{ kind, at?:{r,c} }` |
 | `swap:done` | core | `{ from, to, valid }` |
-| `match:found` | core | `{ groups:[{cells,type,shape}], chain, swap:{from,to}\|null, keep:[], extra:[] }` — mechanics синхронно дописывает `keep` (клетки, где остаётся новая спецфишка — не очищать) и `extra` (доп. клетки с фишками для очистки спецэффектами) | ⚠ TODO интеграции: у core в payload `trigger`, у mechanics `swap`
+| `match:found` | core | `{ groups:[{cells,type,shape,dir,at}], chain, swap:{from,to}\|null, trigger, keep:[], extra:[] }` — mechanics синхронно дописывает `keep` (клетки, где остаётся новая спецфишка — не очищать) и `extra` (доп. клетки с фишками для очистки спецэффектами)
 | `special:created` | mechanics | `{ at, special }` |
 | `special:fired` | mechanics | `{ at, special, affected:[{r,c}] }` — для комбо `special` = `'a+b'` (напр. `'bomb+line_h'`, `'rainbow+tile'`) |
 | `tiles:cleared` | core | `{ cells:[{r,c,type}], chain }` |
@@ -80,11 +80,14 @@ LevelDef = { id, board: {cols, rows, layout, specials?}, moves, goals: Goal[], s
 | `music:play` | любой | `{ name: 'menu'\|'game'\|'win', fade? }` |
 
 ### Уточнения по матчам (core ↔ mechanics)
-- `shape`: `line3 | line4 | line5 | L | T`; `dir`: `'h'|'v'|null` (для L/T null); `at` — клетка, где уместно создать спецфишку (клетка свайпа или пересечение L/T).
-- `trigger`: `{from,to}` при свайпе с участием спецфишки (иначе `null`), `chain` считается с 1.
-- `match:found` обрабатывается синхронно. Пока он идёт, core слушает: `special:created {at, special}` — фишка в `at` получает `special` и не очищается; `special:fired {affected}` — клетки из `affected` добавляются к очистке этого шага.
-- Свайп с участием спецфишки считается валидным ходом без обычного матча.
-- Цели: core сам эмитит `goal:progress` для `kind:'score'` (порог в `amount`); победа, когда по каждой цели `current >= amount` (без целей — когда счёт >= stars[0]). Очки: 10 за фишку × chain.
+- `match:found.groups[i]` = `{cells, type, shape, dir, at}`: `shape` — `line3 | line4 | line5 | L | T | square` (2x2), `dir` — `'h'|'v'|null`, `at` — клетка для спецфишки (клетка свайпа или пересечение L/T). Квадрат 2x2 одного цвета — полноценный матч.
+- `swap` = `{from,to}` у первого шага хода (иначе `null`); `trigger` — то же самое, оставлено для совместимости. `chain` с 1. Комбо спецфишек при свапе чистятся без `match:found` (`resolveSwap` → `tiles:cleared` с `chain:1`).
+- Доска **живая**: `getBoard()` и `board` в `level:start`/`board:shuffled`/`board:settled`/`turn:end` — один и тот же объект, mechanics меняет его напрямую (препятствия, `special`). Копировать не нужно, но и хранить «снимок» нельзя.
+- Очки: 10 за обычную фишку × `chain`; предметы (`type<0`) очков не дают. Цель `score` ведёт mechanics по `score:changed`; core `goal:progress` не эмитит. Победа — по `goals:complete` после тихого `turn:end`; без модуля mechanics — когда счёт ≥ `stars[0]`.
+- Гравитация: стены — `hole` и клетки, где `mechanics.isBlocked`. Фишки падают внутри сегментов колонки между стенами; в каждом сегменте пустое место сверху заполняется новыми фишками.
+- `swap:done` (valid) для комбо приходит после `special:fired` от `resolveSwap` (core узнаёт о валидности комбо только из его вызова), но до `tiles:cleared`.
+- Пока render занят (`render.isBusy()`), `trySwap` возвращает `false` без событий. `hint()` эмитит `hint:show`.
+- Внеходовые `clear:request`/`shuffle:request`/`moves:add` — по разделу «Требования механик к core»; очистка по `clear:request` стартует в микротаске после возврата из `emit` (тесты ждут `await Promise.resolve()`).
 
 Новые события добавляйте в эту таблицу тем же коммитом.
 
