@@ -136,3 +136,32 @@ test('перемешивание: препятствия на месте, цеп
     assert.ok(hasMove(b, defaultEnv(b)));
   }
 });
+
+test('board.items: предметы ставятся на доску, type=-1, не матчатся и не очищаются матчами', () => {
+  const items = [{ r: 5, c: 1, item: 'cherry' }, { r: 5, c: 4, item: 'cherry' }, { r: 4, c: 3, item: 'star' }];
+  for (let seed = 1; seed <= 30; seed++) {
+    const level = lvl(Array(6).fill('......'));
+    level.board.items = items;
+    const b = generateBoard(level, null, defaultEnv, [0, 1, 2, 3, 4], createRng(seed), { n: 0 });
+    const found = b.cells.flat().filter((cell) => cell.tile?.item).map((cell) => cell.tile);
+    assert.equal(found.length, items.length, `seed ${seed}`);
+    for (const it of items) {
+      const t = b.cells[it.r][it.c].tile;
+      assert.equal(t.type, -1); assert.equal(t.item, it.item); assert.equal(t.special, null);
+    }
+    assert.equal(findMatches(b).length, 0);
+    assert.ok(hasMove(b, defaultEnv(b)));
+    // предметы не входят ни в одну группу даже при одинаковом "типе" соседей
+    b.cells[5][0].tile.type = b.cells[5][2].tile.type = 0;
+    b.cells[5][1].tile.type = -1;
+    assert.ok(!findMatches(b).some((g) => g.cells.some((p) => p.r === 5 && p.c === 1)));
+  }
+});
+
+test('board.items: на предмет спецфишка из board.specials не ставится', () => {
+  const level = lvl(Array(6).fill('......'));
+  level.board.items = [{ r: 5, c: 2, item: 'cherry' }];
+  level.board.specials = [{ r: 5, c: 2, special: 'bomb' }];
+  const b = generateBoard(level, null, defaultEnv, [0, 1, 2, 3], createRng(2), { n: 0 });
+  assert.equal(b.cells[5][2].tile.special, null);
+});
