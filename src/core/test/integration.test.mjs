@@ -431,3 +431,23 @@ test('turnId/step: комбо, clear:request и очистка в turn:end — �
   assert.ok(mine.length >= 2 && mine.includes(2), 'очистка из turn:end — следующий шаг');
   assert.equal(new Set(mine).size, mine.length);
 });
+
+test('уровень с board.items: предметы остаются при матчах и выпадают на нижнем ряду', () => {
+  const game = start({
+    board: { cols: 6, rows: 6, layout: Array(6).fill('......'), items: [{ r: 3, c: 0, item: 'cherry' }] },
+    goals: [{ kind: 'drop', target: 'cherry', amount: 1 }],
+    moves: 30,
+  });
+  const core = game.modules.core;
+  const b = core.getBoard();
+  assert.equal(b.cells[3][0].tile.type, -1);
+  const ev = collect(game, ['item:dropped', 'level:won']);
+  for (let i = 0; i < 30 && !ev.some((e) => e[0] === 'level:won'); i++) {
+    const m = core.hint();
+    if (!m) break;
+    core.trySwap(m.from, m.to);
+    const items = core.getBoard().cells.flat().filter((c) => c.tile?.item).length;
+    assert.ok(items <= 1);
+  }
+  if (ev.some((e) => e[0] === 'item:dropped')) assert.equal(ev.at(-1)[0], 'level:won');
+});

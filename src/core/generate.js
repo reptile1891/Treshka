@@ -10,11 +10,22 @@ function fill(board, env, types, rng, ids) {
   }
 }
 
+// Предметы из board.items [{r,c,item}]: type -1, не матчатся и не бьются обычными матчами.
+function placeItems(board, list = []) {
+  for (const it of list) {
+    const tile = board.cells[it.r]?.[it.c]?.tile;
+    if (!tile) continue;
+    tile.type = -1;
+    tile.special = null;
+    tile.item = it.item;
+  }
+}
+
 // Спецфишки из board.specials; тип меняем, только если это не создаёт матч.
 function placeSpecials(board, list = []) {
   for (const s of list) {
     const tile = board.cells[s.r]?.[s.c]?.tile;
-    if (!tile) continue;
+    if (!tile || tile.type < 0) continue; // на предмет спецфишку не ставим
     tile.special = s.special;
     if (s.type !== undefined && s.type !== tile.type) {
       const old = tile.type;
@@ -31,6 +42,7 @@ export function generateBoard(level, empty, makeEnv, types, rng, ids) {
   for (let attempt = 0; attempt < 100; attempt++) {
     if (attempt) board = JSON.parse(template);
     fill(board, makeEnv(board), types, rng, ids);
+    placeItems(board, level.board.items); // до проверки хода: предметы режут возможные матчи
     if (hasMove(board, makeEnv(board))) break;
   }
   placeSpecials(board, level.board.specials);
