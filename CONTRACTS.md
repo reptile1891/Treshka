@@ -10,12 +10,23 @@
 ## Модель данных
 ```
 Board  = { cols, rows, cells: Cell[rows][cols] }   // cells[r][c], r=0 сверху
-Cell   = { tile: Tile|null, obstacle: Obstacle|null }
+Cell   = { tile: Tile|null, obstacle: Obstacle|null, hole: boolean }   // hole — клетки нет, фишки туда не попадают и не падают через неё
 Tile   = { id, type: 0..5, special: null|'line_h'|'line_v'|'bomb'|'rainbow'|'plane' }
 Obstacle = { kind: 'ice'|'chain'|'crate'|'slime'|..., hp }
 Goal   = { kind: 'collect'|'clear_obstacle'|'score'|'drop', target, amount }
-LevelDef = { id, board: {cols, rows, layout}, moves, goals: Goal[], stars: [s1,s2,s3], tileTypes }
+LevelDef = { id, board: {cols, rows, layout, specials?}, moves, goals: Goal[], stars: [s1,s2,s3], tileTypes }
 ```
+
+### LevelDef (JSON в `data/levels/NNN.json`)
+- `board.layout` — массив `rows` строк по `cols` символов, `layout[r][c]`, r=0 сверху:
+  `.` обычная клетка, `#` дыра (hole), `i`/`I` лёд hp 1/2, `c`/`C` цепь hp 1/2, `x`/`X` ящик hp 1/2, `s` слизь hp 1.
+- `board.specials` (необязательно) — заранее выставленные спецфишки `[{r,c,special,type?}]`, на клетках без дыры.
+- `tileTypes` — id используемых цветов (подмножество `0..5`), 3–6 штук. `moves` — число ходов.
+- `stars` — пороги счёта для 1/2/3 звёзд, строго по возрастанию. Победа определяется целями, звёзды — счётом.
+- Цели: `collect` — `target`=id цвета; `clear_obstacle` — `target`=kind, `amount`=сколько снять суммарно
+  (для слизи, которая растёт, может быть больше стартового числа клеток); `score` — без `target`;
+  `drop` — `target`='item', зарезервировано (в уровнях пока не используется).
+- Загрузчик отдаёт `LevelDef` как есть; готовое поле без фишек строит `levels.buildBoard(levelDef)`.
 
 ## События (payload)
 | Событие | Кто эмитит | Payload |
@@ -39,7 +50,7 @@ LevelDef = { id, board: {cols, rows, layout}, moves, goals: Goal[], stars: [s1,s
 | `goal:progress` | mechanics | `{ goal, current }` |
 | `level:won` | core | `{ score, stars, movesLeft }` |
 | `level:failed` | core | `{ score }` |
-| `lives:changed` | levels | `{ lives, nextAt }` |
+| `lives:changed` | levels | `{ lives, nextAt }` (`nextAt` — мс epoch до следующей жизни, `null` если жизни полные) |
 | `coins:changed` | meta | `{ coins, delta }` |
 | `sfx:play` | любой | `{ name, volume? }` |
 
@@ -48,7 +59,10 @@ LevelDef = { id, board: {cols, rows, layout}, moves, goals: Goal[], stars: [s1,s
 ## Публичные API
 - `core`: `startLevel(levelDef)`, `trySwap(from,to)`, `getBoard()`, `hint()`
 - `mechanics`: `registerSpecial(name, handler)`, `registerObstacle(kind, handler)`, `useBooster(kind, at)`
-- `levels`: `loadLevel(id)`, `list()`, `progress()`
+- `levels`: `loadLevel(id, {force?})` → `Promise<LevelDef|null>` (null: нет уровня, он закрыт или нет жизней; `force` обходит проверки),
+  `list()` → `[{id, name, node:{x,y}, stars, best, unlocked}]` (`node` — координаты на карте мира, 0..1; y=0 сверху, первый уровень внизу),
+  `progress()` → `{lives, maxLives, nextAt, stars, completed, total, nextId}`, `buildBoard(levelDef)`, `addLife(n?)`, `ready` (Promise: индекс уровней загружен).
+  Жизнь списывается по `level:failed`; `levels` сам слушает `level:won`/`level:failed` и сохраняет прогресс в localStorage
 - `render`: `setTheme(theme)`
 - `ui`: `showScreen(name)`
 - `audio`: `setVolume(kind, v)`, `mute(bool)`
