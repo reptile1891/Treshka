@@ -45,6 +45,12 @@ LevelDef = { id, board: {cols, rows, layout}, moves, goals: Goal[], stars: [s1,s
 | `lives:changed` | levels | `{ lives, nextAt }` |
 | `coins:changed` | meta | `{ coins, delta }` |
 | `sfx:play` | любой | `{ name, volume? }` |
+| `hint:show` | core | `{ cells:[{r,c},{r,c}] }` — render подсвечивает пару |
+| `ui:screen` | ui | `{ name }` — `menu`/`map`/`game`/`pause`/`win`/`lose` |
+| `game:pause` | ui | `{ paused }` |
+| `booster:armed` | ui/render | `{ kind\|null }` — бустер ждёт клик по клетке |
+| `render:layout` | render | `{ x, y, cell, cols, rows, hudH, boostH }` |
+| `theme:changed` | render | `{ name }` |
 
 ### Уточнения по матчам (core ↔ mechanics)
 - `shape`: `line3 | line4 | line5 | L | T`; `dir`: `'h'|'v'|null` (для L/T null); `at` — клетка, где уместно создать спецфишку (клетка свайпа или пересечение L/T).
@@ -59,9 +65,17 @@ LevelDef = { id, board: {cols, rows, layout}, moves, goals: Goal[], stars: [s1,s
 - `core`: `startLevel(levelDef)`, `trySwap(from,to)`, `getBoard()`, `hint()`
 - `mechanics`: `registerSpecial(name, handler)`, `registerObstacle(kind, handler)`, `useBooster(kind, at)`
 - `levels`: `loadLevel(id)`, `list()`, `progress()`
-- `render`: `setTheme(theme)`
-- `ui`: `showScreen(name)`
+- `render`: `setTheme(nameOrObj)`, `themes()`, `getTheme()`, `icon(kind,key,hp?)` → dataURL (`kind`: `tile`/`special`/`obstacle`), `timings`, `isBusy()`
+- `ui`: `showScreen(name)`, `toast(msg)`, `current()`
 - `audio`: `setVolume(kind, v)`, `mute(bool)`
 - `meta`: `addCoins(n)`, `spend(n)`, `inventory()`
 
 Смена сигнатуры публичного API или payload события — только с обновлением этого файла.
+
+## Договорённости визуала
+- Клетка с `tile:null` и `obstacle:null` в `level:start` считается дыркой (не рисуется).
+- Фишки сопоставляются по стабильному `tile.id`; `tiles:cleared` приходит раньше `special:created`.
+- `input:booster`: `hammer` (с `at`), `shuffle`, `extra_moves`. `hint` — вызов `core.hint()` + событие `hint:show`.
+- `levels.list()` → `[{id, stars?, unlocked?}]`, `levels.progress()` → `{unlocked, stars:{[id]:n}}`; `meta.inventory()` → `{[kind]: n}`.
+- UI запускает уровни через `levels.loadLevel(id)`; HUD берёт данные из `level:load`/`level:start`.
+- `render.isBusy()` — true, пока идут анимации; `render.timings` — длительности в секундах для пейсинга ядром.
