@@ -40,6 +40,8 @@ export function init(game) {
       goalsComplete: false,
       over: false,
       busy: false,
+      turnId: 0, // номер хода/действия; step — номер шага очистки внутри него
+      step: 0,
     };
     bus.emit('level:start', { board, level });
     bus.emit('moves:changed', { left: S.movesLeft });
@@ -50,16 +52,28 @@ export function init(game) {
   bus.on('input:swap', ({ from, to }) => trySwap(from, to));
   bus.on('goals:complete', () => { if (S) S.goalsComplete = true; });
 
-  // Внеходовые запросы mechanics: решаем синхронно, очистку начинаем после возврата из emit.
-  const idle = () => S && !S.over && !S.busy;
+  // Почему сейчас нельзя принять ввод (null — можно). Отказ не молчит: input:rejected {kind, reason}.
+  const blocker = () => {
+    if (!S) return 'no_level';
+    if (S.over) return 'over';
+    if (S.busy) return 'busy';
+    return game.modules.render?.isBusy?.() ? 'animating' : null;
+  };
+  const reject = (kind, reason, extra) => {
+    bus.emit('input:rejected', { kind, reason, ...extra });
+    return false;
+  };
+  const beginTurn = () => { S.turnId++; S.step = 0; };
 
+  // Внеходовые запросы mechanics: решаем синхронно, очистку начинаем после возврата из emit.
   bus.on('clear:request', (req) => {
-    if (!idle()) { req.rejected = true; return; }
+    const why = blocker();
+    if (why) { req.rejected = true; reject('clear', why); return; }
     S.busy = true;
     queueMicrotask(() => {
       try {
-        clearCells(req.cells ?? [], 1);
-        fall(); // mechanics мог снять ящик/камень — освободившиеся клетки заполняем
+        beginTurn();
+        clearAndFall(req.cells ?? [], 1); // mechanics мог снять ящик/камень — освободившиеся клетки заполняем
         settle(0);
       } finally {
         S.busy = false;
@@ -69,14 +83,16 @@ export function init(game) {
   });
 
   bus.on('moves:add', (req) => {
-    if (!idle() || !(req.n > 0)) { req.rejected = true; return; }
+    const why = blocker() ?? (req.n > 0 ? null : 'invalid');
+    if (why) { req.rejected = true; reject('moves', why); return; }
     S.movesLeft += req.n;
     bus.emit('moves:changed', { left: S.movesLeft });
   });
 
   bus.on('shuffle:request', (req) => {
-    if (!idle() || !shuffleBoard(S.board, env(), S.types, S.rng)) { req.rejected = true; return; }
-    bus.emit('board:shuffled', { board: S.board });
+    const why = blocker() ?? (shuffleBoard(S.board, env(), S.types, S.rng) ? null : 'no_shuffle');
+    if (why) { req.rejected = true; reject('shuffle', why); return; }
+    bus.emit('board:shuffled', { board: S.board, turnId: S.turnId });
   });
 
   function addScore(delta) {
@@ -86,7 +102,7 @@ export function init(game) {
   }
 
   // Убирает фишки из клеток, считает очки. Возвращает число очищенных.
-  function clearCells(list, chain) {
+  function clearCells(list, chain, step) {
     const seen = new Set();
     const cells = [];
     for (const p of list) {
@@ -99,28 +115,38 @@ export function init(game) {
     if (!cells.length) return 0;
     for (const p of cells) S.board.cells[p.r][p.c].tile = null;
     // tiles:cleared идёт до гравитации: mechanics успевает снять препятствия и освободить клетки.
-    bus.emit('tiles:cleared', { cells, chain });
+    bus.emit('tiles:cleared', { cells, chain, step, turnId: S.turnId });
     addScore(cells.filter((p) => p.type >= 0).length * POINTS_PER_TILE * chain);
     return cells.length;
   }
 
-  function fall() {
+  function fall(step) {
     const { moves, spawned } = applyGravity(S.board, env(), S.types, S.rng, S.ids);
     if (!moves.length && !spawned.length) return;
     bus.emit('tiles:fell', {
+      step,
+      turnId: S.turnId,
       moves: moves.map((m) => ({ ...m, tile: cloneTile(m.tile) })),
       spawned: spawned.map((s) => ({ to: s.to, tile: cloneTile(s.tile) })),
     });
   }
 
+  // Очистка вне матча (комбо, запрос, turn:end) — отдельный шаг хода.
+  function clearAndFall(list, chain) {
+    const step = ++S.step;
+    clearCells(list, chain, step);
+    fall(step);
+  }
+
   // Один шаг каскада: match:found -> очистка групп (минус keep, плюс extra) -> гравитация.
   function matchStep(groups, chain, swap) {
-    const payload = { groups, chain, swap, trigger: swap, keep: [], extra: [] };
+    const step = ++S.step;
+    const payload = { groups, chain, step, turnId: S.turnId, swap, trigger: swap, keep: [], extra: [] };
     bus.emit('match:found', payload);
     const keep = new Set(payload.keep.map((p) => key(p.r, p.c)));
     const cells = [...groups.flatMap((g) => g.cells), ...payload.extra].filter((p) => !keep.has(key(p.r, p.c)));
-    const n = clearCells(cells, chain);
-    fall();
+    const n = clearCells(cells, chain, step);
+    fall(step);
     return n > 0;
   }
 
@@ -141,16 +167,15 @@ export function init(game) {
     cascade(chain, swap);
     for (let pass = 0; pass < MAX_TURN_PASSES; pass++) {
       if (!hasMove(S.board, env()) && shuffleBoard(S.board, env(), S.types, S.rng)) {
-        bus.emit('board:shuffled', { board: S.board });
+        bus.emit('board:shuffled', { board: S.board, turnId: S.turnId });
       }
-      const payload = { board: S.board, clear: [], dirty: false };
+      const payload = { board: S.board, clear: [], dirty: false, turnId: S.turnId };
       bus.emit('turn:end', payload);
       if (!payload.clear.length && !payload.dirty) break;
-      clearCells(payload.clear, 1);
-      fall();
+      clearAndFall(payload.clear, 1);
       cascade(0);
     }
-    bus.emit('board:settled', { board: S.board });
+    bus.emit('board:settled', { board: S.board, turnId: S.turnId });
   }
 
   function checkOutcome() {
@@ -167,8 +192,8 @@ export function init(game) {
   }
 
   function trySwap(from, to) {
-    if (!S || S.over || S.busy || S.movesLeft <= 0) return false;
-    if (game.modules.render?.isBusy?.()) return false; // ждём конца анимаций
+    const why = blocker() ?? (S?.movesLeft > 0 ? null : 'no_moves');
+    if (why) return reject('swap', why, { from, to });
     const e = env();
     if (!canSwap(S.board, e, from, to)) {
       bus.emit('swap:done', { from, to, valid: false });
@@ -186,12 +211,12 @@ export function init(game) {
     }
     S.busy = true;
     S.movesLeft--;
-    bus.emit('swap:done', { from, to, valid: true });
+    beginTurn();
+    bus.emit('swap:done', { from, to, valid: true, turnId: S.turnId });
     bus.emit('moves:changed', { left: S.movesLeft });
     try {
       if (combo) {
-        clearCells(combo.cells, 1);
-        fall();
+        clearAndFall(combo.cells, 1);
         settle(1);
       } else {
         settle(0, [from, to]);
@@ -208,7 +233,9 @@ export function init(game) {
     trySwap,
     getBoard: () => S?.board ?? null,
     hint() {
-      const move = S && !S.over ? findMove(S.board, env()) : null;
+      const why = blocker();
+      if (why) { reject('hint', why); return null; }
+      const move = findMove(S.board, env());
       if (move) bus.emit('hint:show', { cells: [move.from, move.to] });
       return move;
     },

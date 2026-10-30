@@ -336,3 +336,98 @@ test('предметы: падают до нижнего ряда и выбыв�
   game.modules.core.trySwap({ r: 0, c: 2 }, { r: 1, c: 2 });
   assert.ok(ev.some((e) => e[0] === 'item:dropped'));
 });
+
+test('input:rejected: причины busy / animating / over / no_moves, ввод не теряется молча', async () => {
+  const game = start({ moves: 1 });
+  const rej = collect(game, ['input:rejected']);
+  const core = game.modules.core;
+  // animating: render занят — свап, hint и все запросы отклоняются с событием
+  game.modules.render = { isBusy: () => true };
+  assert.equal(core.trySwap({ r: 0, c: 0 }, { r: 0, c: 1 }), false);
+  assert.equal(core.hint(), null);
+  const reqs = [['clear:request', { cells: [] }], ['moves:add', { n: 1 }], ['shuffle:request', {}]];
+  for (const [n, p] of reqs) { game.bus.emit(n, p); assert.equal(p.rejected, true, n); }
+  assert.deepEqual(rej.map((e) => [e[1].kind, e[1].reason]), [
+    ['swap', 'animating'], ['hint', 'animating'], ['clear', 'animating'], ['moves', 'animating'], ['shuffle', 'animating'],
+  ]);
+  assert.deepEqual(rej[0][1].from, { r: 0, c: 0 });
+  // анимации кончились — всё снова работает
+  game.modules.render.isBusy = () => false;
+  assert.ok(core.hint());
+  // busy: пока core выполняет clear:request
+  rej.length = 0;
+  game.bus.emit('clear:request', { cells: [] });
+  assert.equal(core.trySwap({ r: 0, c: 0 }, { r: 0, c: 1 }), false);
+  assert.equal(rej[0][1].reason, 'busy');
+  await Promise.resolve();
+  // no_moves и over
+  matchBoard(game);
+  core.trySwap({ r: 0, c: 2 }, { r: 1, c: 2 }); // последний ход -> level:failed
+  rej.length = 0;
+  assert.equal(core.trySwap({ r: 0, c: 0 }, { r: 0, c: 1 }), false);
+  assert.equal(rej[0][1].reason, 'over');
+});
+
+test('moves:add с неверным n отклоняется с reason invalid', () => {
+  const game = start();
+  const rej = collect(game, ['input:rejected']);
+  const req = { n: 0 };
+  game.bus.emit('moves:add', req);
+  assert.equal(req.rejected, true);
+  assert.equal(rej[0][1].reason, 'invalid');
+});
+
+test('turnId и step: стабильные индексы шагов, шаги растут внутри хода', () => {
+  const game = start({ board: { cols: 8, rows: 8, layout: Array(8).fill('........') }, moves: 50 });
+  const core = game.modules.core;
+  const names = ['swap:done', 'match:found', 'tiles:cleared', 'tiles:fell', 'turn:end', 'board:settled'];
+  const ev = collect(game, names);
+  for (let i = 0; i < 6; i++) {
+    const m = core.hint(); if (!m) break;
+    core.trySwap(m.from, m.to);
+  }
+  const turns = new Map();
+  for (const [n, p] of ev) {
+    assert.ok(Number.isInteger(p.turnId) && p.turnId >= 1, `${n} без turnId`);
+    if (!turns.has(p.turnId)) turns.set(p.turnId, []);
+    turns.get(p.turnId).push([n, p]);
+  }
+  assert.ok(turns.size >= 3);
+  for (const [, list] of turns) {
+    assert.equal(list[0][0], 'swap:done');
+    assert.equal(list.at(-1)[0], 'board:settled');
+    const matches = list.filter(([n]) => n === 'match:found').map(([, p]) => p.step);
+    // match:found: шаги строго возрастают, начиная с 1; cleared/fell того же шага совпадают с ним
+    assert.equal(matches[0], 1);
+    assert.deepEqual(matches, [...matches].sort((a, b) => a - b));
+    assert.equal(new Set(matches).size, matches.length);
+    for (const [n, p] of list) {
+      if (n !== 'match:found') continue;
+      const cl = list.find(([nn, pp]) => nn === 'tiles:cleared' && pp.step === p.step);
+      assert.ok(cl, 'tiles:cleared того же шага');
+      assert.equal(cl[1].chain, p.chain);
+    }
+  }
+  // turnId возрастает от хода к ходу
+  const ids = [...turns.keys()];
+  assert.deepEqual(ids, [...ids].sort((a, b) => a - b));
+});
+
+test('turnId/step: комбо, clear:request и очистка в turn:end — отдельные шаги', async () => {
+  const game = start();
+  const cl = collect(game, ['tiles:cleared']);
+  game.bus.emit('clear:request', { cells: [{ r: 3, c: 3 }] });
+  await Promise.resolve();
+  assert.equal(cl[0][1].step, 1);
+  const first = cl[0][1].turnId;
+  baseBoard(game);
+  let calls = 0;
+  game.bus.on('turn:end', (p) => { if (++calls === 1) p.clear.push({ r: 5, c: 0 }); });
+  const b = game.modules.core.getBoard();
+  b.cells[0][0].tile.special = 'line_h'; b.cells[0][1].tile.special = 'line_v';
+  game.modules.core.trySwap({ r: 0, c: 0 }, { r: 0, c: 1 });
+  const mine = cl.filter((e) => e[1].turnId === first + 1).map((e) => e[1].step);
+  assert.equal(mine[0], 1); // комбо — шаг 1
+  assert.ok(mine.length >= 2 && mine.includes(2), 'очистка из turn:end — следующий шаг');
+  assert.equal(new Set(mine).size, mine.length);
+});
