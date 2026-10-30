@@ -42,6 +42,7 @@ LevelDef = { id, board: {cols, rows, layout}, moves, goals: Goal[], stars: [s1,s
 | `lives:changed` | levels | `{ lives, nextAt }` |
 | `coins:changed` | meta | `{ coins, delta }` |
 | `sfx:play` | любой | `{ name, volume? }` |
+| `music:play` | любой | `{ name: 'menu'\|'game'\|'win', fade? }` |
 
 Новые события добавляйте в эту таблицу тем же коммитом.
 
@@ -51,7 +52,9 @@ LevelDef = { id, board: {cols, rows, layout}, moves, goals: Goal[], stars: [s1,s
 - `levels`: `loadLevel(id)`, `list()`, `progress()`
 - `render`: `setTheme(theme)`
 - `ui`: `showScreen(name)`
-- `audio`: `setVolume(kind, v)`, `mute(bool)`
+- `audio`: `setVolume(kind, v)` (kind: `music`\|`sfx`, v: 0..1), `mute(bool)`, `getSettings()`, `play(name, {volume, chain})`, `playMusic(name)`, `stopMusic()`
+
+Имена для `sfx:play`: `select`, `swap`, `invalid`, `match`, `clear`, `special_create`, `line`, `bomb`, `rainbow`, `plane`, `ice`, `chain`, `crate`, `slime`, `booster`, `coin`, `shuffle`, `fall`, `win`, `fail`, `click`, `star`. Звук выбора фишки и клики UI эмитят сами render/ui: `sfx:play {name:'select'|'click'}`.
 - `meta`: `addCoins(n)`, `spend(n)`, `inventory()`
 
 Смена сигнатуры публичного API или payload события — только с обновлением этого файла.
