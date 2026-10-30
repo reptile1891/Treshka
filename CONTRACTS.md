@@ -14,7 +14,10 @@ Cell   = { tile: Tile|null, obstacle: Obstacle|null }
 Tile   = { id, type: 0..5, special: null|'line_h'|'line_v'|'bomb'|'rainbow'|'plane' }
 Obstacle = { kind: 'ice'|'chain'|'crate'|'slime'|..., hp }
 Goal   = { kind: 'collect'|'clear_obstacle'|'score'|'drop', target, amount }
-LevelDef = { id, board: {cols, rows, layout}, moves, goals: Goal[], stars: [s1,s2,s3], tileTypes }
+LevelDef = { id, board: {cols, rows, layout}, moves, goals: Goal[], stars: [s1,s2,s3], tileTypes, seed? }
+// tileTypes: число типов или массив id; seed — для детерминированного ГСЧ (по умолчанию 1)
+// layout: массив строк по rows, символ на клетку: '.' пусто, '#' дыра, 'i' лёд, 'c' цепь, 'x' ящик, 's' слизь.
+//   Дыры и ящики (hp>0) неподвижны: фишки не падают через них; цепь не даёт двигать фишку.
 ```
 
 ## События (payload)
@@ -26,7 +29,7 @@ LevelDef = { id, board: {cols, rows, layout}, moves, goals: Goal[], stars: [s1,s
 | `input:swap` | ui/render | `{ from:{r,c}, to:{r,c} }` |
 | `input:booster` | ui | `{ kind, at?:{r,c} }` |
 | `swap:done` | core | `{ from, to, valid }` |
-| `match:found` | core | `{ groups:[{cells,type,shape}], chain }` |
+| `match:found` | core | `{ groups:[{cells,type,shape,dir,at}], chain, trigger }` |
 | `special:created` | mechanics | `{ at, special }` |
 | `special:fired` | mechanics | `{ at, special, affected:[{r,c}] }` |
 | `tiles:cleared` | core | `{ cells:[{r,c,type}], chain }` |
@@ -42,6 +45,13 @@ LevelDef = { id, board: {cols, rows, layout}, moves, goals: Goal[], stars: [s1,s
 | `lives:changed` | levels | `{ lives, nextAt }` |
 | `coins:changed` | meta | `{ coins, delta }` |
 | `sfx:play` | любой | `{ name, volume? }` |
+
+### Уточнения по матчам (core ↔ mechanics)
+- `shape`: `line3 | line4 | line5 | L | T`; `dir`: `'h'|'v'|null` (для L/T null); `at` — клетка, где уместно создать спецфишку (клетка свайпа или пересечение L/T).
+- `trigger`: `{from,to}` при свайпе с участием спецфишки (иначе `null`), `chain` считается с 1.
+- `match:found` обрабатывается синхронно. Пока он идёт, core слушает: `special:created {at, special}` — фишка в `at` получает `special` и не очищается; `special:fired {affected}` — клетки из `affected` добавляются к очистке этого шага.
+- Свайп с участием спецфишки считается валидным ходом без обычного матча.
+- Цели: core сам эмитит `goal:progress` для `kind:'score'` (порог в `amount`); победа, когда по каждой цели `current >= amount` (без целей — когда счёт >= stars[0]). Очки: 10 за фишку × chain.
 
 Новые события добавляйте в эту таблицу тем же коммитом.
 
