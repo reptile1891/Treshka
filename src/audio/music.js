@@ -95,7 +95,7 @@ function fadeOut(c, sec) {
 let wanted = null;
 
 // Включает трек с кроссфейдом. До разблокировки контекста запоминает желаемый.
-export function playMusic(name, { fade = 1.5, loop = true } = {}) {
+export function playMusic(name, { fade = 1.5 } = {}) {
   if (!TRACKS[name]) return;
   wanted = name;
   onUnlock(() => {

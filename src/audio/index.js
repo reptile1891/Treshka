@@ -23,6 +23,7 @@ export function init(game) {
   game.modules.audio = api;
 
   bus.on('sfx:play', ({ name, volume } = {}) => playSfx(name, { volume }));
+  bus.on('music:play', ({ name, fade } = {}) => playMusic(name, { fade }));
   bus.on('input:swap', () => playSfx('swap'));
   bus.on('swap:done', ({ valid }) => { if (valid === false) playSfx('invalid'); });
   bus.on('match:found', ({ chain = 1 } = {}) => playSfx('match', { chain }));
