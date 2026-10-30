@@ -77,6 +77,7 @@ LevelDef = { id, board: {cols, rows, layout, specials?}, moves, goals: Goal[], s
 | `booster:armed` | ui/render | `{ kind\|null }` — бустер ждёт клик по клетке |
 | `render:layout` | render | `{ x, y, cell, cols, rows, hudH, boostH }` |
 | `theme:changed` | render | `{ name }` |
+| `music:play` | любой | `{ name: 'menu'\|'game'\|'win', fade? }` |
 
 ### Уточнения по матчам (core ↔ mechanics)
 - `shape`: `line3 | line4 | line5 | L | T`; `dir`: `'h'|'v'|null` (для L/T null); `at` — клетка, где уместно создать спецфишку (клетка свайпа или пересечение L/T).
@@ -97,7 +98,8 @@ LevelDef = { id, board: {cols, rows, layout, specials?}, moves, goals: Goal[], s
   Жизнь списывается по `level:failed`; `levels` сам слушает `level:won`/`level:failed` и сохраняет прогресс в localStorage
 - `render`: `setTheme(nameOrObj)`, `themes()`, `getTheme()`, `icon(kind,key,hp?)` → dataURL (`kind`: `tile`/`special`/`obstacle`), `timings`, `isBusy()`
 - `ui`: `showScreen(name)`, `toast(msg)`, `current()`
-- `audio`: `setVolume(kind, v)`, `mute(bool)`
+- `audio`: `setVolume(kind, v)` (kind: `music`\|`sfx`, v: 0..1), `mute(bool)`, `getSettings()`, `play(name, {volume, chain})`, `playMusic(name)`, `stopMusic()`
+  Имена для `sfx:play`: `select`, `swap`, `invalid`, `match`, `clear`, `special_create`, `line`, `bomb`, `rainbow`, `plane`, `ice`, `chain`, `crate`, `slime`, `booster`, `coin`, `shuffle`, `fall`, `win`, `fail`, `click`, `star`. Звук выбора фишки и клики UI эмитят сами render/ui: `sfx:play {name:'select'|'click'}`.
 - `meta`: `addCoins(n)`, `spend(n)`, `inventory()`, `coins()`, `useBooster(kind)` (списывает 1 шт., `false` если нет — UI зовёт перед `input:booster`), `addBooster(kind,n)`; каталог и мета-фичи: `shop`, `daily`, `wheel`, `events`, `quests`, `achievements` (см. `src/meta/index.js`)
 - `meta` слушает: `level:start`/`level:load` (id уровня), `level:won`, `level:failed`, `tiles:cleared`, `match:found`, `special:created`, `lives:changed`
 
