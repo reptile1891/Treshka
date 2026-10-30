@@ -1,5 +1,5 @@
 // Поиск матчей, определение форм, проверка ходов. Чистые функции над Board.
-import { isStatic, isMovable } from './board.js';
+import { isMovable } from './board.js';
 
 const key = (r, c) => r * 1000 + c;
 const same = (a, b) => a.r === b.r && a.c === b.c;
@@ -27,6 +27,15 @@ function collectRuns(board) {
   };
   scan(rows, cols, (r, c) => typeAt(board, r, c), 'h');
   scan(cols, rows, (c, r) => typeAt(board, r, c), 'v');
+  // Квадраты 2x2 одного цвета — тоже матч (из них делается самолётик).
+  for (let r = 0; r + 1 < rows; r++) {
+    for (let c = 0; c + 1 < cols; c++) {
+      const t = typeAt(board, r, c);
+      if (t >= 0 && typeAt(board, r, c + 1) === t && typeAt(board, r + 1, c) === t && typeAt(board, r + 1, c + 1) === t) {
+        runs.push({ dir: 'sq', type: t, cells: [{ r, c }, { r, c: c + 1 }, { r: r + 1, c }, { r: r + 1, c: c + 1 }] });
+      }
+    }
+  }
   return runs;
 }
 
@@ -48,8 +57,11 @@ function buildGroup(runs, preferred) {
     }
     shape = best.isL ? 'L' : 'T';
     at = best.p;
+  } else if (!hs.length && !vs.length) {
+    shape = 'square';
+    at = preferred.find((p) => seen.has(key(p.r, p.c))) ?? cells[0];
   } else {
-    const run = runs[0];
+    const run = [...hs, ...vs].sort((a, b) => b.cells.length - a.cells.length)[0];
     const n = run.cells.length;
     shape = n >= 5 ? 'line5' : n === 4 ? 'line4' : 'line3';
     dir = run.dir;
@@ -80,10 +92,10 @@ export function findMatches(board, preferred = []) {
   return [...comps.values()].map((rs) => buildGroup(rs, preferred));
 }
 
-export function canSwap(board, a, b) {
+export function canSwap(board, env, a, b) {
   if (!inBounds(board, a) || !inBounds(board, b)) return false;
   if (Math.abs(a.r - b.r) + Math.abs(a.c - b.c) !== 1) return false;
-  return isMovable(board.cells[a.r][a.c]) && isMovable(board.cells[b.r][b.c]);
+  return isMovable(board, env, a.r, a.c) && isMovable(board, env, b.r, b.c);
 }
 
 export function swapTiles(board, a, b) {
@@ -104,20 +116,28 @@ function matchesAt(board, r, c) {
     }
     return n;
   };
-  return len(0, -1) + len(0, 1) >= 2 || len(-1, 0) + len(1, 0) >= 2;
+  if (len(0, -1) + len(0, 1) >= 2 || len(-1, 0) + len(1, 0) >= 2) return true;
+  for (const dr of [-1, 1]) {
+    for (const dc of [-1, 1]) {
+      const rr = r + dr, cc = c + dc;
+      if (rr < 0 || cc < 0 || rr >= board.rows || cc >= board.cols) continue;
+      if (typeAt(board, r, cc) === t && typeAt(board, rr, c) === t && typeAt(board, rr, cc) === t) return true;
+    }
+  }
+  return false;
 }
 
-export const hasSpecial = (board, p) => !!board.cells[p.r][p.c].tile?.special;
-
 // Первый возможный ход (обмен соседних фишек) или null.
-export function findMove(board) {
+export function findMove(board, env) {
   for (let r = 0; r < board.rows; r++) {
     for (let c = 0; c < board.cols; c++) {
       for (const [dr, dc] of [[0, 1], [1, 0]]) {
         const a = { r, c };
         const b = { r: r + dr, c: c + dc };
-        if (!canSwap(board, a, b)) continue;
-        if (hasSpecial(board, a) || hasSpecial(board, b)) return { from: a, to: b };
+        if (!canSwap(board, env, a, b)) continue;
+        const sa = board.cells[a.r][a.c].tile, sb = board.cells[b.r][b.c].tile;
+        if (sa.special && sb.special) return { from: a, to: b }; // комбо спецфишек
+        if ((sa.special === 'rainbow' || sb.special === 'rainbow') && sa.type >= 0 && sb.type >= 0) return { from: a, to: b };
         swapTiles(board, a, b);
         const ok = matchesAt(board, a.r, a.c) || matchesAt(board, b.r, b.c);
         swapTiles(board, a, b);
@@ -128,5 +148,4 @@ export function findMove(board) {
   return null;
 }
 
-export const hasMove = (board) => findMove(board) !== null;
-export { isStatic };
+export const hasMove = (board, env) => findMove(board, env) !== null;

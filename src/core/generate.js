@@ -1,32 +1,47 @@
 // Генерация поля без готовых матчей и с гарантией хода; перемешивание.
-import { createEmptyBoard, isStatic, isMovable, newTile, pickType } from './board.js';
+import { createEmptyBoard, isWall, isMovable, newTile, pickType } from './board.js';
 import { findMatches, hasMove } from './match.js';
 
-function fill(board, types, rng, ids) {
+function fill(board, env, types, rng, ids) {
   for (let r = 0; r < board.rows; r++) {
     for (let c = 0; c < board.cols; c++) {
-      const cell = board.cells[r][c];
-      if (!isStatic(cell)) cell.tile = newTile(pickType(board, r, c, types, rng), ids);
+      board.cells[r][c].tile = isWall(board, env, r, c) ? null : newTile(pickType(board, r, c, types, rng), ids);
     }
   }
 }
 
-export function generateBoard(level, types, rng, ids) {
-  const { cols, rows, layout } = level.board;
-  let board;
-  for (let attempt = 0; attempt < 100; attempt++) {
-    board = createEmptyBoard(cols, rows, layout);
-    fill(board, types, rng, ids);
-    if (hasMove(board)) break;
+// Спецфишки из board.specials; тип меняем, только если это не создаёт матч.
+function placeSpecials(board, list = []) {
+  for (const s of list) {
+    const tile = board.cells[s.r]?.[s.c]?.tile;
+    if (!tile) continue;
+    tile.special = s.special;
+    if (s.type !== undefined && s.type !== tile.type) {
+      const old = tile.type;
+      tile.type = s.type;
+      if (findMatches(board).length) tile.type = old;
+    }
   }
+}
+
+// empty — готовая доска без фишек (levels.buildBoard); makeEnv(board) -> env.
+export function generateBoard(level, empty, makeEnv, types, rng, ids) {
+  let board = empty ?? createEmptyBoard(level.board.cols, level.board.rows, level.board.layout);
+  const template = JSON.stringify(board);
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (attempt) board = JSON.parse(template);
+    fill(board, makeEnv(board), types, rng, ids);
+    if (hasMove(board, makeEnv(board))) break;
+  }
+  placeSpecials(board, level.board.specials);
   return board;
 }
 
-// Перемешивает подвижные фишки; true, если получилось поле без матчей и с ходом.
-export function shuffleBoard(board, types, rng) {
+// Перемешивает подвижные фишки (препятствия остаются на местах). true — получилось поле без матчей и с ходом.
+export function shuffleBoard(board, env, types, rng) {
   const pos = [];
-  board.cells.forEach((row, r) => row.forEach((cell, c) => { if (isMovable(cell)) pos.push({ r, c }); }));
-  const ok = () => findMatches(board).length === 0 && hasMove(board);
+  board.cells.forEach((row, r) => row.forEach((_, c) => { if (isMovable(board, env, r, c)) pos.push({ r, c }); }));
+  const ok = () => findMatches(board).length === 0 && hasMove(board, env);
   const tiles = pos.map((p) => board.cells[p.r][p.c].tile);
   for (let attempt = 0; attempt < 100; attempt++) {
     for (let i = tiles.length - 1; i > 0; i--) {
@@ -36,11 +51,11 @@ export function shuffleBoard(board, types, rng) {
     pos.forEach((p, i) => { board.cells[p.r][p.c].tile = tiles[i]; });
     if (ok()) return true;
   }
-  // Запасной путь: перераздать типы тем же фишкам.
+  // Запасной путь: перераздать цвета обычным фишкам (спецфишки и предметы не трогаем).
   for (let attempt = 0; attempt < 100; attempt++) {
     for (const p of pos) {
       const tile = board.cells[p.r][p.c].tile;
-      tile.type = pickType(board, p.r, p.c, types, rng);
+      if (tile.type >= 0) tile.type = pickType(board, p.r, p.c, types, rng);
     }
     if (ok()) return true;
   }

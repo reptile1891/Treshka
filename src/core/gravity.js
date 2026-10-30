@@ -1,17 +1,17 @@
-// Гравитация и спавн. Фишки падают внутри сегментов колонки между неподвижными клетками;
-// новые появляются только в верхнем сегменте (начинающемся с ряда 0).
-import { isStatic, newTile } from './board.js';
+// Гравитация и спавн. Фишки падают внутри сегментов колонки между стенами (дыры, ящики, камни, слизь);
+// в каждом сегменте пустое место сверху заполняют новые фишки.
+import { isWall, newTile } from './board.js';
 
-export function applyGravity(board, types, rng, ids) {
+export function applyGravity(board, env, types, rng, ids) {
   const moves = [];
   const spawned = [];
   const { rows, cols, cells } = board;
   for (let c = 0; c < cols; c++) {
     let bottom = rows - 1;
     while (bottom >= 0) {
-      if (isStatic(cells[bottom][c])) { bottom--; continue; }
+      if (isWall(board, env, bottom, c)) { bottom--; continue; }
       let top = bottom;
-      while (top > 0 && !isStatic(cells[top - 1][c])) top--;
+      while (top > 0 && !isWall(board, env, top - 1, c)) top--;
       let write = bottom;
       for (let r = bottom; r >= top; r--) {
         const tile = cells[r][c].tile;
@@ -23,12 +23,10 @@ export function applyGravity(board, types, rng, ids) {
         }
         write--;
       }
-      if (top === 0) {
-        for (let r = write; r >= 0; r--) {
-          const tile = newTile(types[rng.int(types.length)], ids);
-          cells[r][c].tile = tile;
-          spawned.push({ to: { r, c }, tile });
-        }
+      for (let r = write; r >= top; r--) {
+        const tile = newTile(types[rng.int(types.length)], ids);
+        cells[r][c].tile = tile;
+        spawned.push({ to: { r, c }, tile });
       }
       bottom = top - 1;
     }
