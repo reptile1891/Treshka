@@ -1,0 +1,28 @@
+{
+  "id": 26,
+  "board": {
+    "cols": 8,
+    "rows": 8,
+    "layout": [
+      "........",
+      "........",
+      "........",
+      "CCCCCCCC",
+      "cccccccc",
+      "........",
+      "........",
+      "........"
+    ],
+    "specials": [
+      { "r": 1, "c": 1, "special": "bomb" },
+      { "r": 6, "c": 6, "special": "bomb" },
+      { "r": 2, "c": 4, "special": "line_h" }
+    ]
+  },
+  "moves": 25,
+  "goals": [
+    { "kind": "clear_obstacle", "target": "chain", "amount": 16 }
+  ],
+  "stars": [4200, 6700, 9700],
+  "tileTypes": [0, 1, 2, 3, 4, 5]
+}

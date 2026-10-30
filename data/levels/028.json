@@ -1,0 +1,25 @@
+{
+  "id": 28,
+  "board": {
+    "cols": 8,
+    "rows": 8,
+    "layout": [
+      "........",
+      "........",
+      "..CXCX..",
+      "..C##X..",
+      "..C##X..",
+      "..CXCX..",
+      "........",
+      "........"
+    ]
+  },
+  "moves": 28,
+  "goals": [
+    { "kind": "clear_obstacle", "target": "chain", "amount": 6 },
+    { "kind": "clear_obstacle", "target": "crate", "amount": 6 },
+    { "kind": "collect", "target": 5, "amount": 30 }
+  ],
+  "stars": [4700, 7500, 10800],
+  "tileTypes": [0, 1, 2, 3, 4, 5]
+}

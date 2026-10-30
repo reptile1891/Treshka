@@ -1,0 +1,27 @@
+{
+  "id": 22,
+  "board": {
+    "cols": 8,
+    "rows": 8,
+    "layout": [
+      "........",
+      "...cc...",
+      "........",
+      "...CC...",
+      "...CC...",
+      "........",
+      "...cc...",
+      "........"
+    ],
+    "specials": [
+      { "r": 2, "c": 2, "special": "plane" },
+      { "r": 5, "c": 5, "special": "plane" }
+    ]
+  },
+  "moves": 26,
+  "goals": [
+    { "kind": "clear_obstacle", "target": "chain", "amount": 8 }
+  ],
+  "stars": [4100, 6600, 9400],
+  "tileTypes": [0, 1, 2, 3, 4]
+}

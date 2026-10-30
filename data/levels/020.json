@@ -1,0 +1,29 @@
+{
+  "id": 20,
+  "board": {
+    "cols": 8,
+    "rows": 8,
+    "layout": [
+      "........",
+      "........",
+      "........",
+      "..iiii..",
+      "..iiii..",
+      "........",
+      "........",
+      "s......s"
+    ],
+    "specials": [
+      { "r": 1, "c": 2, "special": "line_v" },
+      { "r": 1, "c": 5, "special": "line_v" },
+      { "r": 6, "c": 3, "special": "bomb" }
+    ]
+  },
+  "moves": 26,
+  "goals": [
+    { "kind": "clear_obstacle", "target": "slime", "amount": 10 },
+    { "kind": "clear_obstacle", "target": "ice", "amount": 8 }
+  ],
+  "stars": [4100, 6600, 9400],
+  "tileTypes": [0, 1, 2, 3, 4]
+}

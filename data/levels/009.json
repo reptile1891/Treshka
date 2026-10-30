@@ -1,0 +1,22 @@
+{
+  "id": 9,
+  "board": {
+    "cols": 7,
+    "rows": 7,
+    "layout": [
+      ".......",
+      "...c...",
+      "...c...",
+      ".ccccc.",
+      "...c...",
+      "...c...",
+      "......."
+    ]
+  },
+  "moves": 22,
+  "goals": [
+    { "kind": "clear_obstacle", "target": "chain", "amount": 9 }
+  ],
+  "stars": [2900, 4600, 6700],
+  "tileTypes": [0, 1, 2, 3]
+}

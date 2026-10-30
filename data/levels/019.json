@@ -1,0 +1,27 @@
+{
+  "id": 19,
+  "board": {
+    "cols": 8,
+    "rows": 8,
+    "layout": [
+      "........",
+      "........",
+      "..xxxx..",
+      "..xxxx..",
+      "..xxxx..",
+      "..xxxx..",
+      "........",
+      "........"
+    ],
+    "specials": [
+      { "r": 1, "c": 1, "special": "bomb" },
+      { "r": 6, "c": 6, "special": "bomb" }
+    ]
+  },
+  "moves": 24,
+  "goals": [
+    { "kind": "clear_obstacle", "target": "crate", "amount": 16 }
+  ],
+  "stars": [3600, 5800, 8300],
+  "tileTypes": [0, 1, 2, 3, 4]
+}

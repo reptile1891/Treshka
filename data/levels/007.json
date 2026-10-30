@@ -1,0 +1,23 @@
+{
+  "id": 7,
+  "board": {
+    "cols": 8,
+    "rows": 8,
+    "layout": [
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "iiiiiiii",
+      "iiiiiiii"
+    ]
+  },
+  "moves": 25,
+  "goals": [
+    { "kind": "clear_obstacle", "target": "ice", "amount": 16 }
+  ],
+  "stars": [3200, 5100, 7400],
+  "tileTypes": [0, 1, 2, 3, 4]
+}

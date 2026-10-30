@@ -1,0 +1,30 @@
+{
+  "id": 23,
+  "board": {
+    "cols": 8,
+    "rows": 8,
+    "layout": [
+      "##xxxx##",
+      "#......#",
+      "........",
+      "........",
+      "........",
+      ".iiiiii.",
+      "#iiiiii#",
+      "##....##"
+    ],
+    "specials": [
+      { "r": 2, "c": 3, "special": "line_h" },
+      { "r": 4, "c": 4, "special": "bomb" },
+      { "r": 6, "c": 2, "special": "plane" },
+      { "r": 2, "c": 6, "special": "rainbow" }
+    ]
+  },
+  "moves": 28,
+  "goals": [
+    { "kind": "clear_obstacle", "target": "ice", "amount": 12 },
+    { "kind": "clear_obstacle", "target": "crate", "amount": 4 }
+  ],
+  "stars": [4400, 7000, 10100],
+  "tileTypes": [0, 1, 2, 3, 4, 5]
+}

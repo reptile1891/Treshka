@@ -1,0 +1,28 @@
+{
+  "id": 21,
+  "board": {
+    "cols": 8,
+    "rows": 8,
+    "layout": [
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........"
+    ],
+    "specials": [
+      { "r": 3, "c": 3, "special": "rainbow" },
+      { "r": 4, "c": 4, "special": "rainbow" }
+    ]
+  },
+  "moves": 25,
+  "goals": [
+    { "kind": "collect", "target": 0, "amount": 30 },
+    { "kind": "collect", "target": 1, "amount": 30 }
+  ],
+  "stars": [3700, 5900, 8500],
+  "tileTypes": [0, 1, 2, 3, 4]
+}
