@@ -1,0 +1,29 @@
+{
+  "id": 32,
+  "board": {
+    "cols": 8,
+    "rows": 8,
+    "layout": [
+      "........",
+      "........",
+      "........",
+      "........",
+      "iiiiiiii",
+      "iiiiiiii",
+      "........",
+      "........"
+    ],
+    "items": [
+      { "r": 0, "c": 2, "item": "cherry" },
+      { "r": 0, "c": 5, "item": "cherry" },
+      { "r": 1, "c": 3, "item": "cherry" }
+    ]
+  },
+  "moves": 28,
+  "goals": [
+    { "kind": "drop", "target": "cherry", "amount": 3 },
+    { "kind": "clear_obstacle", "target": "ice", "amount": 16 }
+  ],
+  "stars": [4000, 6400, 9200],
+  "tileTypes": [0, 1, 2, 3, 4]
+}

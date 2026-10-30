@@ -1,0 +1,30 @@
+{
+  "id": 34,
+  "board": {
+    "cols": 8,
+    "rows": 8,
+    "layout": [
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "........",
+      "s......s",
+      "........"
+    ],
+    "items": [
+      { "r": 0, "c": 1, "item": "cherry" },
+      { "r": 0, "c": 3, "item": "cherry" },
+      { "r": 0, "c": 4, "item": "cherry" },
+      { "r": 0, "c": 6, "item": "cherry" }
+    ]
+  },
+  "moves": 32,
+  "goals": [
+    { "kind": "drop", "target": "cherry", "amount": 4 },
+    { "kind": "clear_obstacle", "target": "slime", "amount": 8 }
+  ],
+  "stars": [5000, 8000, 11500],
+  "tileTypes": [0, 1, 2, 3, 4]
+}
