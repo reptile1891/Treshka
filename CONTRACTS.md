@@ -40,23 +40,24 @@ LevelDef = { id, board: {cols, rows, layout, specials?}, moves, goals: Goal[], s
 | `level:start` | core | `{ board, level }` |
 | `input:swap` | ui/render | `{ from:{r,c}, to:{r,c} }` |
 | `input:booster` | ui | `{ kind, at?:{r,c} }` |
-| `swap:done` | core | `{ from, to, valid }` |
-| `match:found` | core | `{ groups:[{cells,type,shape,dir,at}], chain, swap:{from,to}\|null, trigger, keep:[], extra:[] }` — mechanics синхронно дописывает `keep` (клетки, где остаётся новая спецфишка — не очищать) и `extra` (доп. клетки с фишками для очистки спецэффектами)
+| `swap:done` | core | `{ from, to, valid, turnId? }` — `turnId` только у валидного свапа |
+| `match:found` | core | `{ groups:[{cells,type,shape,dir,at}], chain, step, turnId, swap:{from,to}\|null, trigger, keep:[], extra:[] }` — mechanics синхронно дописывает `keep` (клетки, где остаётся новая спецфишка — не очищать) и `extra` (доп. клетки с фишками для очистки спецэффектами)
 | `special:created` | mechanics | `{ at, special }` |
 | `special:fired` | mechanics | `{ at, special, affected:[{r,c}] }` — для комбо `special` = `'a+b'` (напр. `'bomb+line_h'`, `'rainbow+tile'`) |
-| `tiles:cleared` | core | `{ cells:[{r,c,type}], chain }` |
+| `tiles:cleared` | core | `{ cells:[{r,c,type}], chain, step, turnId }` |
 | `obstacle:damaged` | mechanics | `{ at, kind, hp }` |
 | `obstacle:spawned` | mechanics | `{ at, kind, hp, from? }` (напр. слизь расползлась из `from`; фишка в клетке удалена) |
 | `booster:used` | mechanics | `{ kind, at? }` — бустер реально применён (meta списывает здесь) |
 | `item:dropped` | mechanics | `{ item, at }` |
 | `goals:complete` | mechanics | — все цели выполнены; победу (`level:won`) объявляет core, когда доска успокоилась |
-| `turn:end` | core | `{ board, clear:[], dirty:false }` — см. ниже |
+| `turn:end` | core | `{ board, clear:[], dirty:false, turnId }` — см. ниже |
 | `clear:request` | mechanics | `{ cells:[{r,c}], source, rejected? }` |
 | `moves:add` | mechanics | `{ n, rejected? }` |
 | `shuffle:request` | mechanics | `{ rejected? }` |
-| `tiles:fell` | core | `{ moves:[{from,to,tile}], spawned:[{to,tile}] }` |
-| `board:settled` | core | `{ board }` |
-| `board:shuffled` | core | `{ board }` |
+| `tiles:fell` | core | `{ moves:[{from,to,tile}], spawned:[{to,tile}], step, turnId }` |
+| `board:settled` | core | `{ board, turnId }` |
+| `board:shuffled` | core | `{ board, turnId }` |
+| `input:rejected` | core | `{ kind:'swap'\|'hint'\|'clear'\|'moves'\|'shuffle', reason, from?, to? }` — `reason`: `animating` (render занят), `busy` (core в ходе), `over` (игра окончена), `no_level`, `no_moves`, `invalid`, `no_shuffle` |
 | `score:changed` | core | `{ score, delta }` |
 | `moves:changed` | core | `{ left }` |
 | `goal:progress` | mechanics | `{ goal, current, index, done }` (`goal` — Goal из LevelDef, `current` ≤ amount) |
@@ -86,7 +87,8 @@ LevelDef = { id, board: {cols, rows, layout, specials?}, moves, goals: Goal[], s
 - Очки: 10 за обычную фишку × `chain`; предметы (`type<0`) очков не дают. Цель `score` ведёт mechanics по `score:changed`; core `goal:progress` не эмитит. Победа — по `goals:complete` после тихого `turn:end`; без модуля mechanics — когда счёт ≥ `stars[0]`.
 - Гравитация: стены — `hole` и клетки, где `mechanics.isBlocked`. Фишки падают внутри сегментов колонки между стенами; в каждом сегменте пустое место сверху заполняется новыми фишками.
 - `swap:done` (valid) для комбо приходит после `special:fired` от `resolveSwap` (core узнаёт о валидности комбо только из его вызова), но до `tiles:cleared`.
-- Пока render занят (`render.isBusy()`), `trySwap` возвращает `false` без событий. `hint()` эмитит `hint:show`.
+- `turnId` растёт с каждым ходом игрока или внеходовым действием (`clear:request`); `step` — номер шага очистки внутри хода с 1 (шаг каскада, комбо, очистка из `turn:end`): `match:found`, `tiles:cleared` и `tiles:fell` одного шага имеют одинаковые `turnId` и `step`. Ядро синхронное и анимаций не ждёт — порядок показа выстраивает render по этим индексам.
+- Пока render занят (`render.isBusy()`), core отклоняет `trySwap` (возвращает `false`), `hint()` (`null`) и запросы `clear:request`/`moves:add`/`shuffle:request` (`rejected = true`); во всех случаях эмитится `input:rejected {kind, reason}`. `hint()` при успехе эмитит `hint:show`. `render.timings` ядро не использует: таймеры подсказок и пауз — дело UI/render.
 - Внеходовые `clear:request`/`shuffle:request`/`moves:add` — по разделу «Требования механик к core»; очистка по `clear:request` стартует в микротаске после возврата из `emit` (тесты ждут `await Promise.resolve()`).
 
 Новые события добавляйте в эту таблицу тем же коммитом.
