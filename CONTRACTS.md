@@ -109,12 +109,23 @@ LevelDef = { id, board: {cols, rows, layout, specials?}, moves, goals: Goal[], s
 Смена сигнатуры публичного API или payload события — только с обновлением этого файла.
 
 ## Договорённости визуала
-- Клетка с `tile:null` и `obstacle:null` в `level:start` считается дыркой (не рисуется).
-- Фишки сопоставляются по стабильному `tile.id`; `tiles:cleared` приходит раньше `special:created`.
+Движок синхронный: все события хода приходят за один тик, поэтому render **не рисует по событию**, а копит их в очередь и проигрывает по шагам. Логическая сетка спрайтов меняется только при проигрывании; для расчётов используются данные из payload'ов (доска живая и к моменту проигрывания уже в конечном состоянии), `board:settled` сверяет сетку по `tile.id`.
+
+Фактический порядок событий одного хода (render на него опирается):
+1. Комбо спецфишек: `special:fired` (`special:'a+b'`) приходит **до** `swap:done`. Render рисует обычный свап, затем эффект комбо.
+2. `swap:done` → `moves:changed` → `match:found` (внутри него mechanics шлёт `special:fired` цепных спецфишек и `special:created`) → внутри `tiles:cleared` mechanics шлёт `obstacle:damaged` **до** того, как `tiles:cleared` дойдёт до render → `score:changed` → `tiles:fell`.
+3. Шаг очереди закрывается на `tiles:cleared`: в него входят накопленные `special:fired`, `special:created`, `obstacle:damaged`, `obstacle:spawned`, `item:dropped`. Воспроизведение: эффекты `special:fired` → исчезновение фишек (группа втягивается в клетку новой спецфишки) и урон препятствиям → превращение `keep`-фишки в спецфишку (`special:created`, фишка не исчезает).
+4. События без `tiles:cleared` (слизь на `turn:end`, и т.п.) сбрасываются отдельным шагом на `tiles:fell`/`turn:end`/`board:settled`/`board:shuffled`.
+5. `score:changed` после `tiles:cleared` приписывается последнему ещё не начатому шагу («+N» всплывает при очистке).
+6. `tiles:fell` — отдельный шаг; следующий шаг не начинается, пока фишки не приземлятся (каскады не накладываются).
+
+Прочее:
+- Дыра — `cell.hole` (для старых данных: клетка без фишки и препятствия).
+- Фишки сопоставляются по стабильному `tile.id`; предметы (`item`, `type:-1`) рисуются как вишенка.
 - `input:booster`: `hammer` (с `at`), `shuffle`, `extra_moves`. `hint` — вызов `core.hint()` + событие `hint:show`.
 - `levels.list()` → `[{id, stars?, unlocked?}]`, `levels.progress()` → `{unlocked, stars:{[id]:n}}`; `meta.inventory()` → `{[kind]: n}`.
-- UI запускает уровни через `levels.loadLevel(id)`; HUD берёт данные из `level:load`/`level:start`.
-- `render.isBusy()` — true, пока идут анимации; `render.timings` — длительности в секундах для пейсинга ядром.
+- UI запускает уровни через `levels.loadLevel(id)`; HUD берёт данные из `level:load`/`level:start`; экран победы/поражения показывается, когда `render.isBusy()` стал false.
+- `render.isBusy()` — true, пока очередь не пуста или что-то движется; core по нему отклоняет ввод. `render.timings` — длительности в секундах.
 
 ## Требования механик к core
 Слушатели mechanics синхронные: всё, что они меняют на доске, готово к моменту возврата из `emit`.
