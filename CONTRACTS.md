@@ -41,6 +41,12 @@ LevelDef = { id, board: {cols, rows, layout}, moves, goals: Goal[], stars: [s1,s
 | `level:failed` | core | `{ score }` |
 | `lives:changed` | levels | `{ lives, nextAt }` |
 | `coins:changed` | meta | `{ coins, delta }` |
+| `inventory:changed` | meta | `{ kind, count }` — бустеры |
+| `lives:grant` | meta | `{ amount }` — levels добавляет жизни (не выше `maxLives`) |
+| `reward:granted` | meta | `{ source, coins, boosters, lives }` — для показа награды в UI |
+| `shop:purchased` | meta | `{ id }` |
+| `quest:completed` | meta | `{ id }` — задание дня выполнено |
+| `achievement:unlocked` | meta | `{ id }` |
 | `sfx:play` | любой | `{ name, volume? }` |
 
 Новые события добавляйте в эту таблицу тем же коммитом.
@@ -52,6 +58,7 @@ LevelDef = { id, board: {cols, rows, layout}, moves, goals: Goal[], stars: [s1,s
 - `render`: `setTheme(theme)`
 - `ui`: `showScreen(name)`
 - `audio`: `setVolume(kind, v)`, `mute(bool)`
-- `meta`: `addCoins(n)`, `spend(n)`, `inventory()`
+- `meta`: `addCoins(n)`, `spend(n)`, `inventory()`, `coins()`, `useBooster(kind)` (списывает 1 шт., `false` если нет — UI зовёт перед `input:booster`), `addBooster(kind,n)`; каталог и мета-фичи: `shop`, `daily`, `wheel`, `events`, `quests`, `achievements` (см. `src/meta/index.js`)
+- `meta` слушает: `level:start`/`level:load` (id уровня), `level:won`, `level:failed`, `tiles:cleared`, `match:found`, `special:created`, `lives:changed`
 
 Смена сигнатуры публичного API или payload события — только с обновлением этого файла.
