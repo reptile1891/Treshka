@@ -12,6 +12,7 @@ export const OBSTACLE_CHARS = {
 };
 export const SPECIALS = ['line_h', 'line_v', 'bomb', 'rainbow', 'plane'];
 export const GOAL_KINDS = ['collect', 'clear_obstacle', 'score', 'drop'];
+const ITEM_NAME = /^[a-z0-9_]+$/;
 export const MIN_SIZE = 4;
 export const MAX_SIZE = 12;
 
@@ -72,6 +73,30 @@ export function validateLevel(def) {
     }
   }
 
+  const items = b?.items;
+  if (items !== undefined) {
+    if (!Array.isArray(items)) err('board.items: массив');
+    else {
+      const seen = new Set((b.specials ?? []).map((q) => q?.r + ',' + q?.c));
+      items.forEach((it, i) => {
+        const at = `items[${i}]`;
+        if (!it || !isInt(it.r) || !isInt(it.c)) return err(`${at}: нужны целые r, c`);
+        if (typeof it.item !== 'string' || !ITEM_NAME.test(it.item)) err(`${at}: item — имя из a-z, 0-9, _`);
+        const key = it.r + ',' + it.c;
+        if (seen.has(key)) err(`${at}: клетка занята другим предметом или спецфишкой`);
+        seen.add(key);
+        if (!boardOk) return;
+        const ch = b.layout[it.r]?.[it.c];
+        if (ch === undefined || ch === HOLE) return err(`${at}: клетка вне поля или дыра`);
+        if (ch !== EMPTY && ch !== 'i' && ch !== 'I') return err(`${at}: предмет можно ставить на пустую клетку или лёд`);
+        if (it.r >= b.rows - 1) return err(`${at}: предмет в нижнем ряду — выпадет сразу`);
+        for (let r = it.r + 1; r < b.rows; r++) {
+          if ('#xX'.includes(b.layout[r][it.c])) return err(`${at}: под предметом дыра или ящик — не спуститься`);
+        }
+      });
+    }
+  }
+
   if (!Array.isArray(def.goals) || def.goals.length === 0) err('goals: нужна хотя бы одна цель');
   else def.goals.forEach((g, i) => {
     const at = `goals[${i}]`;
@@ -82,7 +107,11 @@ export function validateLevel(def) {
       if (!Object.values(OBSTACLE_CHARS).some((o) => o.kind === g.target)) err(`${at}: неизвестный kind препятствия «${g.target}»`);
       else if (boardOk && !kindsPresent.has(g.target)) err(`${at}: на поле нет препятствия «${g.target}»`);
     }
-    if (g.kind === 'drop' && g.target !== 'item') err(`${at}: target должен быть 'item'`);
+    if (g.kind === 'drop') {
+      if (g.target !== undefined && (typeof g.target !== 'string' || !ITEM_NAME.test(g.target))) err(`${at}: target — имя предмета или не задан (любые)`);
+      const have = Array.isArray(items) ? items.filter((it) => g.target === undefined || it?.item === g.target).length : 0;
+      if (have < g.amount) err(`${at}: предметов на поле ${have}, нужно ≥ ${g.amount} (core их не досыпает)`);
+    }
   });
 
   const s = def.stars;

@@ -1,0 +1,27 @@
+{
+  "id": 31,
+  "board": {
+    "cols": 7,
+    "rows": 7,
+    "layout": [
+      ".......",
+      ".......",
+      ".......",
+      ".......",
+      ".......",
+      ".......",
+      "......."
+    ],
+    "items": [
+      { "r": 0, "c": 1, "item": "cherry" },
+      { "r": 0, "c": 3, "item": "cherry" },
+      { "r": 0, "c": 5, "item": "cherry" }
+    ]
+  },
+  "moves": 25,
+  "goals": [
+    { "kind": "drop", "target": "cherry", "amount": 3 }
+  ],
+  "stars": [3200, 5100, 7400],
+  "tileTypes": [0, 1, 2, 3]
+}
