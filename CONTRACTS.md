@@ -29,10 +29,10 @@ LevelDef = { id, board: {cols, rows, layout}, moves, goals: Goal[], stars: [s1,s
 | `swap:done` | core | `{ from, to, valid }` |
 | `match:found` | core | `{ groups:[{cells,type,shape}], chain, swap:{from,to}\|null, keep:[], extra:[] }` — mechanics синхронно дописывает `keep` (клетки, где остаётся новая спецфишка — не очищать) и `extra` (доп. клетки с фишками для очистки спецэффектами) |
 | `special:created` | mechanics | `{ at, special }` |
-| `special:fired` | mechanics | `{ at, special, affected:[{r,c}] }` |
+| `special:fired` | mechanics | `{ at, special, affected:[{r,c}] }` — для комбо `special` = `'a+b'` (напр. `'bomb+line_h'`, `'rainbow+tile'`) |
 | `tiles:cleared` | core | `{ cells:[{r,c,type}], chain }` |
 | `obstacle:damaged` | mechanics | `{ at, kind, hp }` |
-| `obstacle:spawned` | mechanics | `{ at, kind, hp }` (напр. слизь расползлась; фишка в клетке удалена) |
+| `obstacle:spawned` | mechanics | `{ at, kind, hp, from? }` (напр. слизь расползлась из `from`; фишка в клетке удалена) |
 | `booster:used` | mechanics | `{ kind, at? }` — бустер реально применён (meta списывает здесь) |
 | `item:dropped` | mechanics | `{ item, at }` |
 | `goals:complete` | mechanics | — все цели выполнены; победу (`level:won`) объявляет core, когда доска успокоилась |
@@ -69,12 +69,12 @@ LevelDef = { id, board: {cols, rows, layout}, moves, goals: Goal[], stars: [s1,s
 ## Требования механик к core
 Слушатели mechanics синхронные: всё, что они меняют на доске, готово к моменту возврата из `emit`.
 1. `swap:done` (valid) эмитится до первого `match:found`/`tiles:cleared` этого хода.
-2. Перед свапом core вызывает `mechanics.resolveSwap(from,to)`. Не `null` → свап валиден, core чистит `cells` (спецфишки/комбо), иначе обычная логика матчей. Если `isLocked` для from/to — свап запрещён.
+2. Перед свапом core вызывает `mechanics.resolveSwap(from,to)`. Не `null` → свап валиден, core чистит `cells` (спецфишки/комбо), иначе обычная логика матчей. Если `isLocked` для from/to — свап запрещён. `resolveSwap` вызывать только когда свап точно будет выполнен: у него есть побочные эффекты (события, урон препятствиям).
 3. `match:found`: после `emit` core чистит клетки групп минус `keep` плюс `extra`. Группа 2x2 одного цвета — тоже группа (`shape:'square'`), из неё делается самолётик.
 4. `tiles:cleared` эмитится до гравитации: mechanics может снять препятствие (ящик) и освободить клетку.
 5. Гравитация/спавн обходят клетки, где `isBlocked(r,c)` (ящик, камень, слизь) — это стены. Фишки с `type<0` (предметы) не матчатся.
 6. После успокоения доски core эмитит `turn:end`. Если после `emit` `clear.length` или `dirty` — core чистит `clear`, пересчитывает гравитацию и эмитит `turn:end` снова. Победа/поражение — только после тихого `turn:end`.
-7. `clear:request` / `moves:add` / `shuffle:request`: вне хода, ход не тратят; если core занят или игра окончена — ставит `rejected = true`.
+7. `clear:request` / `moves:add` / `shuffle:request`: вне хода, ход не тратят; если core занят или игра окончена — ставит `rejected = true`. Решение core принимает синхронно, а саму очистку начинает после возврата из `emit` (mechanics после принятия бьёт ящики/камни). `cells` может быть пустым — тогда core просто пересчитывает доску и эмитит `turn:end`.
 8. `shuffle:request`: core сохраняет препятствия на местах и гарантирует наличие хода.
 
 ## Расширение mechanics
